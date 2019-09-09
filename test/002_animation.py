@@ -5,7 +5,7 @@ from pygame.locals import *
 
 pygame.init()
 
-FPS = 30 # set frames per second
+FPS = 60 # set frames per second
 fpsClock = pygame.time.Clock()
 
 # set up window
