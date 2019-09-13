@@ -21,7 +21,7 @@ class Window():
         self.DISPLAYSURF = pygame.display.set_mode(WINDOWSIZE, 0, 32)
         pygame.display.set_caption(CAPTION)
 
-    def center(self):
+    def get_center(self):
         return (int(self.WINDOWSIZE[0] / 2), int(self.WINDOWSIZE[1] / 2))
 
 
@@ -158,7 +158,7 @@ def main(): # main game code
     window = Window(CAPTION='player movement test')  # instance a window for the game
 
 
-    player = Player(window.center())  # instance a player at centre of window
+    player = Player(window.get_center())  # instance a player at centre of window
     object_list = {'Asteroids':[], 'Players':[player], 'Explosions':[]}  # dic of all the active objects
 
     while True: # main game loop
@@ -170,6 +170,7 @@ def main(): # main game code
             # if player/asteroid collide detected
                 # player.Explode()
                 # spawn an explosion
+
 
             if player.State == 'Active':  # only accept player inputs if ship is active
                 # player input event handling
@@ -187,13 +188,17 @@ def main(): # main game code
 
 
             # draw objects
-            window.DISPLAYSURF.fill(0, 0, 0)
+            window.DISPLAYSURF.fill((35, 35, 55))
             for asteroid in object_list['Asteroids']:
-                # if asteroid.Draw(): blit asteroid at asteroid.Postion
+                # if asteroid.Draw(): blit asteroid at asteroid.Position
                 pass
 
-            for player in object_list['Players']:
-                # if player.Draw(): blit player sprite at player.Postion
+            # if player.Draw(): blit player sprite at player.Position
+            if player.Draw:
+                window.DISPLAYSURF.blit(player.ShipSprite, (player.Position[0], player.Position[1]))
+
+            for explosion in object_list['Explosions']:
+                # if explosion.Draw(): blit explosion sprite at explosion.Position
                 pass
 
 
