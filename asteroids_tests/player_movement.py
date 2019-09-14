@@ -6,15 +6,15 @@ import numpy as np
 
 
 # global variables
-SCRIPTPATH = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]
-SPRITEPATH = SCRIPTPATH + '\sprites'
+GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]
+SPRITEDIR = os.path.join(GAMEDIR, 'sprites')
 GameState = 'menu screen'
 
 
 class Window():
 
     DISPLAYSURF = ''
-    WINDOWSIZE=(800, 600)
+    WINDOWSIZE=(1200, 900)
     CAPTION = 'your caption here'
 
     def __init__(self, WINDOWSIZE=WINDOWSIZE, CAPTION=CAPTION): # class constructor
@@ -25,25 +25,22 @@ class Window():
         return (int(self.WINDOWSIZE[0] / 2), int(self.WINDOWSIZE[1] / 2))
 
 
-class Player():
+class Player(pygame.sprite.Sprite):
 
     # global variables
-    global GameState, SPRITEPATH
-
-    # resources
-    ShipSprite = pygame.image.load(SPRITEPATH+'/player.png')
+    global GameState, SPRITEDIR
 
     # class properties
-    Type = 'Player'
-    Draw = False
-    State = 'Inactive'
-    PlayerName = ''
-    Score = 0
-    Lives = 3
-    Position = [0, 0]
-    Orientation = 0
-    Vector = np.array([0, 0])
-    ThrustVector = np.array([0, 0])
+    type = 'Player'
+    draw = False
+    state = 'Inactive'
+    player_name = ''
+    score = 0
+    lives = 3
+    position = [0, 0]
+    orientation = 0
+    vector = np.array([0, 0])
+    thrust_vector = np.array([0, 0])
 
 
     # static properties
@@ -53,23 +50,28 @@ class Player():
 
 
 
-    def __init__(self, SpawnLocation):  # class constructor
-        self.spawn(SpawnLocation)
+    def __init__(self, window):  # class constructor
+        pygame.sprite.Sprite.__init__(self)  # init the parent class
+        self.image = pygame.image.load(os.path.join(SPRITEDIR, 'player.png')).convert()
+        self.image.set_colorkey((0, 0, 0))
+        self.rect = self.image.get_rect()
+        self.rect.center = window.get_center()
+
         pass
 
     def spawn(self, SpawnLocation):  # spawns a new player ship
         print('spawning new player ship at position {0}'.format(SpawnLocation))
-        self.Position = SpawnLocation
-        self.Orientation = 0
-        self.Draw = True
-        self.State = 'Active'
+        self.position = SpawnLocation
+        self.orientation = 0
+        self.draw = True
+        self.state = 'Active'
         pass
 
     def explode(self):  # triggered if collision between player and asteroid
-        self.State = 'Exploding'
-        self.Draw = False  # set flag so ship isn't drawn until re-spawned
-        self.Lives -= 1
-        if self.Lives == 0:
+        self.state = 'Exploding'
+        self.draw = False  # set flag so ship isn't drawn until re-spawned
+        self.lives -= 1
+        if self.lives == 0:
             GameState = 'game over'
 
     def rotate_cw(self):
@@ -82,7 +84,7 @@ class Player():
         # build the thrust vector
         pass
 
-    def update_position(self):
+    def update(self):
         # decay the main vector
         # add the thrust vector to the main vector
         # generate new player position from main vector
@@ -90,10 +92,10 @@ class Player():
 
 
 
-class Explosion():
+class Explosion(pygame.sprite.Sprite):
 
     # global variables
-    global GameState, SPRITEPATH
+    global GameState, SPRITEDIR
 
     # resources
         # explosion sprites here
@@ -103,13 +105,13 @@ class Explosion():
     Draw = False
 
     def __init__(self, SpawnLocation):  # class constructor
-        pass
+        pygame.sprite.Sprite.__init__(self)  # init the parent class
 
 
-class Asteroid():
+class Asteroid(pygame.sprite.Sprite):
 
     # global variables
-    global GameState, SPRITEPATH
+    global GameState, SPRITEDIR
 
     # resources
         # explosion sprites here
@@ -119,13 +121,13 @@ class Asteroid():
     Draw = False
 
     def __init__(self):  # class constructor
-        pass
+        pygame.sprite.Sprite.__init__(self)  # init the parent class
 
 
-class Projecile():
+class Projecile(pygame.sprite.Sprite):
 
     # global variables
-    global GameState, SPRITEPATH
+    global GameState, SPRITEDIR
 
     # resources
         # explosion sprites here
@@ -135,7 +137,7 @@ class Projecile():
     Draw = False
 
     def __init__(self):  # class constructor
-        pass
+        pygame.sprite.Sprite.__init__(self)  # init the parent class
 
 
 
@@ -154,16 +156,16 @@ def main(): # main game code
     INPUT_THRUST = 'up_arrow'
     INPUT_FIRE = 'space'
 
-    fpsClock = pygame.time.Clock()
+    clock = pygame.time.Clock()
     window = Window(CAPTION='player movement test')  # instance a window for the game
-
-
-    player = Player(window.get_center())  # instance a player at centre of window
-    object_list = {'Asteroids':[], 'Players':[player], 'Explosions':[]}  # dic of all the active objects
-
+    player = Player(window)
+    all_sprites = pygame.sprite.Group()  # all sprites are now in this group, makes update and draw easy!
+    all_sprites.add(player)
+    
     while True: # main game loop
+        clock.tick(FPS)
 
-        # Event handling loop
+        # Event handling
         for event in pygame.event.get():
 
             # collision event check and handling
@@ -172,7 +174,7 @@ def main(): # main game code
                 # spawn an explosion
 
 
-            if player.State == 'Active':  # only accept player inputs if ship is active
+            #if player.State == 'Active':  # only accept player inputs if ship is active
                 # player input event handling
                     # if left arrow rotate ccw
 
@@ -181,33 +183,24 @@ def main(): # main game code
                     # if space modify the thrust vector
 
                     # if fire, spawn a projectile
-                pass
-
-            # update object positions
-            player.update_position()
-
-
-            # draw objects
-            window.DISPLAYSURF.fill((35, 35, 55))
-            for asteroid in object_list['Asteroids']:
-                # if asteroid.Draw(): blit asteroid at asteroid.Position
-                pass
-
-            # if player.Draw(): blit player sprite at player.Position
-            if player.Draw:
-                window.DISPLAYSURF.blit(player.ShipSprite, (player.Position[0], player.Position[1]))
-
-            for explosion in object_list['Explosions']:
-                # if explosion.Draw(): blit explosion sprite at explosion.Position
-                pass
-
+                #pass
 
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit()
 
+
+        # Update
+        all_sprites.update()
+
+
+        # Draw
+        window.DISPLAYSURF.fill((35, 35, 55))
+        all_sprites.draw(window.DISPLAYSURF)
+
+
         pygame.display.update()
-        fpsClock.tick(FPS)
+
 
 
 if __name__ == '__main__':
