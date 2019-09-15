@@ -5,11 +5,12 @@ from pygame.locals import *
 import numpy as np
 
 
+
 # global variables
 GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]
 SPRITEDIR = os.path.join(GAMEDIR, 'sprites')
 GameState = 'menu screen'
-
+COLOURS = {'BLACK':(0,0,0)}
 
 class Window():
 
@@ -28,7 +29,14 @@ class Window():
 class Player(pygame.sprite.Sprite):
 
     # global variables
-    global GameState, SPRITEDIR
+    global GameState, SPRITEDIR, COLOURS
+
+    # static properties
+    THRUST_V = pygame.Vector2(0,-0.05)  # the polar vector of a thrust impulse
+    MAX_ROTATION_STEP = 4  # the max step value (per frame) of a rotation
+    MIN_ROTATION_STEP = 0.001
+    INERTIA = 99.5  # decay rate (as a percentage) of the movement vector
+    ROTATION_DECAY = 97
 
     # class properties
     type = 'Player'
@@ -37,36 +45,30 @@ class Player(pygame.sprite.Sprite):
     player_name = ''
     score = 0
     lives = 3
-    position = [0, 0]
+    position = pygame.Vector2(0,0)
     orientation = 0
-    vector = np.array([0, 0])
-    thrust_vector = np.array([0, 0])
+    motion_vector = pygame.Vector2(0,0)
+    thrust_vector = pygame.Vector2(0,0)
+    rotate_step = MIN_ROTATION_STEP
+    last_rotate_direction = None
 
-
-
-    # static properties
-    THRUST_V_LENGTH = 1  # the vector length of a thrust impulse
-    ROTATION_STEP = 1  # the step value (per frame) of a rotation
-    DECAY_RATE = 1  # decay rate (as a percentage) of the movement vector
 
 
 
     def __init__(self, window):  # class constructor
         pygame.sprite.Sprite.__init__(self)  # init the parent class
-        self.image = pygame.image.load(os.path.join(SPRITEDIR, 'player.png')).convert()
-        self.image.set_colorkey((0, 0, 0))
+        self.window = window  # store a link to the window obj so we can query info about it
+        self.ship_original = pygame.image.load(os.path.join(SPRITEDIR, 'player.png'))#.convert()
+        self.shipthrust_original = pygame.image.load(os.path.join(SPRITEDIR, 'player_thrust.png'))#.convert()
+
+        self.image_original = self.ship_original.copy()
+        self.image = self.image_original.copy()  # this one will be the transformed result of ...orig
+        self.image.set_colorkey((COLOURS['BLACK']))
         self.rect = self.image.get_rect()
-        self.rect.center = window.get_center()
+        self.position.xy = window.get_center()[0], window.get_center()[1]
+        self.rect.center = self.position
+        self.last_update = 0
 
-        pass
-
-    def spawn(self, SpawnLocation):  # spawns a new player ship
-        print('spawning new player ship at position {0}'.format(SpawnLocation))
-        self.position = SpawnLocation
-        self.orientation = 0
-        self.draw = True
-        self.state = 'Active'
-        pass
 
     def explode(self):  # triggered if collision between player and asteroid
         self.state = 'Exploding'
@@ -75,21 +77,74 @@ class Player(pygame.sprite.Sprite):
         if self.lives == 0:
             GameState = 'game over'
 
-    def rotate_cw(self):
-        pass
 
-    def rotate_ccw(self):
-        pass
+    def rotate(self, direction):
+        # check when last rotated by milliseconds - this locks rotation rate to clock rather than tick
+        timenow = pygame.time.get_ticks()
+        if timenow - self.last_update > 16.6666:
+            if not self.last_rotate_direction:
+                self.last_rotate_direction = direction
+            if not direction == self.last_rotate_direction:
+                self.rotate_step = self.MIN_ROTATION_STEP
+                self.last_rotate_direction = direction
+            this_rotate = self.rotate_step
+            if direction == 'cw':
+                this_rotate = self.rotate_step *-1
+            self.orientation += this_rotate # add this rotate into ship orientation
+            self.rotate_step += 0.5
+            self.rotate_step = np.clip(self.rotate_step, 0, self.MAX_ROTATION_STEP)
+
 
     def thrust(self):
-        # build the thrust vector
-        pass
+        self.image_original = self.shipthrust_original.copy()
+        # rotate polar thrust vector to ship orientation to give our final thrust vector
+        self.thrust_vector = self.THRUST_V.rotate(self.orientation*-1)
+        self.motion_vector += self.thrust_vector
+        # set thrust vector to zero, else it'll keep adding
+        self.thrust_vector.xy = 0, 0
 
     def update(self):
+
+    # update rotation
+        # decay the rotation step
+        self.rotate_step = (self.rotate_step / 100) * self.ROTATION_DECAY
+        self.rotate_step = np.clip(self.rotate_step, self.MIN_ROTATION_STEP, self.MAX_ROTATION_STEP)
+        # constrain to 0-360 so we don't have mental orientation values
+        if self.orientation > 360:
+            self.orientation -= 360
+        if self.orientation < 0:
+            self.orientation += 360
+        old_center = self.rect.center  # cache the center of the current sprite rect
+        self.image = pygame.transform.rotate(self.image_original, self.orientation)  # recreate image from clean transform of original
+        self.rect = self.image.get_rect()  # grab the rect of the new image
+        self.rect.center = old_center  # ... and position it in the same center as the previous one
+        self.image.set_colorkey(COLOURS['BLACK'])  # new image, so need to colour key
+
+
+    # update position
+
         # decay the main vector
-        # add the thrust vector to the main vector
-        # generate new player position from main vector
-        pass
+        self.motion_vector.x = (self.motion_vector.x / 100) * self.INERTIA
+        self.motion_vector.y = (self.motion_vector.y / 100) * self.INERTIA
+        # add the thrust vector to the main motion vector
+        self.motion_vector += self.thrust_vector
+        # update the position with our new vector
+        self.position += self.motion_vector
+        # screen position wrap around
+        if self.position.x < 0:
+            self.position.x = self.window.WINDOWSIZE[0]
+        if self.position.x > self.window.WINDOWSIZE[0]:
+            self.position.x = 0
+        if self.position.y < 0:
+            self.position.y = self.window.WINDOWSIZE[1]
+        if self.position.y > self.window.WINDOWSIZE[1]:
+            self.position.y = 0
+        # finally, update the rect position by assigning the vect to rect.center
+        self.rect.center = self.position
+
+        #self.last_update = timenow
+        self.image_original = self.ship_original.copy()
+
 
 
 
@@ -125,7 +180,7 @@ class Asteroid(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)  # init the parent class
 
 
-class Projecile(pygame.sprite.Sprite):
+class Projectile(pygame.sprite.Sprite):
 
     # global variables
     global GameState, SPRITEDIR
@@ -149,7 +204,7 @@ def main(): # main game code
 
     pygame.init()
     # some constants...
-    FPS = 60 # set frames per second
+    FPS = 120 # set frames per second
 
     # keyboard mappings
     INPUT_ROTATE_CCW = 'left_arrow'
@@ -166,6 +221,14 @@ def main(): # main game code
     while True: # main game loop
         clock.tick(FPS)
 
+        keystate = pygame.key.get_pressed()
+        if keystate[pygame.K_LEFT]:
+            player.rotate(direction='ccw')
+        if keystate[pygame.K_RIGHT]:
+            player.rotate(direction='cw')
+        if keystate[pygame.K_UP]:
+            player.thrust()
+
         # Event handling
         for event in pygame.event.get():
 
@@ -173,18 +236,6 @@ def main(): # main game code
             # if player/asteroid collide detected
                 # player.Explode()
                 # spawn an explosion
-
-
-            #if player.State == 'Active':  # only accept player inputs if ship is active
-                # player input event handling
-                    # if left arrow rotate ccw
-
-                    # if right arrow rotate cw
-
-                    # if space modify the thrust vector
-
-                    # if fire, spawn a projectile
-                #pass
 
             if event.type == QUIT:
                 pygame.quit()
@@ -206,3 +257,6 @@ def main(): # main game code
 
 if __name__ == '__main__':
     main()
+
+
+
