@@ -38,6 +38,7 @@ class Player(pygame.sprite.Sprite):
     MIN_ROTATION_STEP = 0.001  # the min step value (per frame) of a rotation
     INERTIA = 99.5  # decay rate (as a percentage) of the movement vector
     ROTATION_DECAY = 97  # the rotation step decay rate
+    SCREENPADDING = 15
 
     # class properties
     type = 'Player'
@@ -58,7 +59,9 @@ class Player(pygame.sprite.Sprite):
         pygame.sprite.Sprite.__init__(self)  # init the parent class
         self.window = window  # store a link to the window obj so we can query info about it
         self.ship_original = pygame.image.load(os.path.join(SPRITEDIR, 'player.png'))#.convert()
+        self.ship_original = pygame.transform.smoothscale(self.ship_original, (26, 38))
         self.shipthrust_original = pygame.image.load(os.path.join(SPRITEDIR, 'player_thrust.png'))#.convert()
+        self.shipthrust_original = pygame.transform.smoothscale(self.shipthrust_original, (26, 38))
         self.image_original = self.ship_original.copy()
         self.image = self.image_original.copy()  # this one will be the transformed result of ...orig
         self.image.set_colorkey((COLOURS['BLACK']))
@@ -129,23 +132,21 @@ class Player(pygame.sprite.Sprite):
         # update the position with our new vector
         self.position += self.motion_vector
         # screen position wrap around
-        if self.position.x < 0:
-            self.position.x = self.window.WINDOWSIZE[0]
-        if self.position.x > self.window.WINDOWSIZE[0]:
-            self.position.x = 0
-        if self.position.y < 0:
-            self.position.y = self.window.WINDOWSIZE[1]
-        if self.position.y > self.window.WINDOWSIZE[1]:
-            self.position.y = 0
+        if self.position.x < -self.SCREENPADDING:
+            self.position.x = self.window.WINDOWSIZE[0] + self.SCREENPADDING
+        if self.position.x > self.window.WINDOWSIZE[0] + self.SCREENPADDING:
+            self.position.x = -self.SCREENPADDING
+        if self.position.y < -self.SCREENPADDING:
+            self.position.y = self.window.WINDOWSIZE[1] + self.SCREENPADDING
+        if self.position.y > self.window.WINDOWSIZE[1] + self.SCREENPADDING:
+            self.position.y = -self.SCREENPADDING
         # finally, update the rect position by assigning the vect to rect.center
         self.rect.center = self.position
 
         #self.last_update = timenow
         self.image_original = self.ship_original.copy()
 
-#key =3
-#ast = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png',}
-#ast[key]
+
 
 class Asteroid(pygame.sprite.Sprite):
 
@@ -153,20 +154,26 @@ class Asteroid(pygame.sprite.Sprite):
     global GameState, SPRITEDIR, COLOURS
 
     # static properties
+    MIN_VECTOR = 0.1
+    MAX_VECTOR = 0.2
+    MIN_ROTATE_SPEED = 0
+    MAX_ROTATE_SPEED = 10
+    SCREEN_PAD = 200
 
     # class properties
     type = 'Asteroid'
     position = pygame.Vector2(0,0)
     orientation = 0
+    position = pygame.Vector2(0,0)
+    orientation = 0
+    rotation_speed = 1
     motion_vector = pygame.Vector2(0,0)
     stage = 1
+    health = 100
 
 
-    # class properties
-
-    # asteroid resource definitions
+    # resource definitions
     asteroid_sprites = {}
-
     asteroid_sprites_a = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png',}
     asteroid_sprites_b = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png',}
     asteroid_sprites_c = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png',}
@@ -176,26 +183,44 @@ class Asteroid(pygame.sprite.Sprite):
     def __init__(self, window):  # class constructor
         pygame.sprite.Sprite.__init__(self)  # init the parent class
 
-        self.asteroid_sprites = self.return_random_sprites()  # randomly choose a sprite set
-        #self.asteroid_sprites[self.stage]
+        # pick random sprite set
+        self.asteroid_sprites = np.random.choice([self.asteroid_sprites_a, self.asteroid_sprites_b,
+                                                  self.asteroid_sprites_c, self.asteroid_sprites_d], 1)[0]
         self.image_original = pygame.image.load(os.path.join(SPRITEDIR, self.asteroid_sprites[self.stage]))
         self.image = self.image_original.copy()
         self.image.set_colorkey((COLOURS['BLACK']))
         self.rect = self.image.get_rect()
-        self.position.xy = window.get_center()[0], window.get_center()[1]
+
+        # pick random side to spawn - top, left, right, bottom
+        spawnside = np.random.choice(['top', 'bottom', 'left', 'right'], 1)[0]
+
+        # build polar vector of x = 0, y = rand min->max
+        self.motion_vector.y = random.uniform(self.MIN_VECTOR, self.MAX_VECTOR)
+
+
+        # pick random (range constrained) position and vector rotate to start
+        if spawnside == 'top':
+            self.position.xy = random.randint(0, window.WINDOWSIZE[0]), self.SCREEN_PAD
+            self.motion_vector = self.motion_vector.rotate((random.randint(100, 260))*-1)
+        if spawnside == 'left':
+            self.position.xy = self.SCREEN_PAD, random.randint(0, window.WINDOWSIZE[1])
+            self.motion_vector = self.motion_vector.rotate((random.randint(10, 170))*-1)
+        if spawnside == 'right':
+            self.position.xy = window.WINDOWSIZE[0] - self.SCREEN_PAD, random.randint(0, window.WINDOWSIZE[1])
+            self.motion_vector = self.motion_vector.rotate((random.randint(190, 350))*-1)
+        if spawnside == 'bottom':
+            self.position.xy = random.randint(0, window.WINDOWSIZE[0]), window.WINDOWSIZE[1] - self.SCREEN_PAD
+            self.motion_vector = self.motion_vector.rotate((random.randint(-80, 80))*-1)
+
         self.rect.center = self.position
 
 
-    def return_random_sprites(self):  # returns a random asteroid sprite set
-        return np.random.choice([self.asteroid_sprites_a, self.asteroid_sprites_b,
-                                                  self.asteroid_sprites_c, self.asteroid_sprites_d], 1)[0]
-
-    def return_random_vector(self, mag_range=(0.1, 5.0)):
-        vector = pygame.Vector2(random.randint(-5, 5), random.randint(-5, 5))
 
 
     def update(self):
-
+        self.position += self.motion_vector
+        #print(self.position, self.motion_vector)
+        self.rect.center = self.position
         pass
 
 
@@ -257,13 +282,21 @@ def main(): # main game code
 
     asteroid_spawn_interval = 10000  # in milliseconds
     num_initial_asteroids = 5
+    asteroids = []  # temp list of asteroids for debugging the position
 
-    for i in range(num_initial_asteroids):
-        print('spawning asteroid')
-        ast = Asteroid(window)
-        all_sprites.add(ast)
+    #for i in range(num_initial_asteroids):
+    #    print('spawning asteroid')
+    #    asteroids.append(Asteroid(window))
+        #print(ast.position, ast.motion_vector)
+    #    all_sprites.add(asteroids[len(asteroids)-1])
 
+    ast_a = Asteroid(window)
+    ast_b = Asteroid(window)
 
+    asteroid_sprites = pygame.sprite.Group(ast_a, ast_b)
+
+    #print('all sprites:')
+    #print(all_sprites.spritedict)
 
     while True: # main game loop
         clock.tick(FPS)
@@ -291,11 +324,13 @@ def main(): # main game code
 
         # Update
         all_sprites.update()
+        asteroid_sprites.update()
 
 
         # Draw
         window.DISPLAYSURF.fill((35, 35, 55))
         all_sprites.draw(window.DISPLAYSURF)
+        asteroid_sprites.draw(window.DISPLAYSURF)
 
 
         pygame.display.update()
