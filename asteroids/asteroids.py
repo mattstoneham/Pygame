@@ -34,35 +34,37 @@ class Window():
         return (int(self.WINDOWSIZE[0] / 2), int(self.WINDOWSIZE[1] / 2))
 
 
+
+
 class Player(pygame.sprite.Sprite):
 
     # global variables
     global GameState, SPRITEDIR, COLOURS
 
     # static properties
+    TYPE = 'Player'
     THRUST_V = pygame.Vector2(0,-0.05)  # the polar vector of a thrust impulse
     MAX_ROTATION_STEP = 4  # the max step value (per frame) of a rotation
     MIN_ROTATION_STEP = 0.001  # the min step value (per frame) of a rotation
     INERTIA = 99.5  # decay rate (as a percentage) of the movement vector
     ROTATION_DECAY = 97  # the rotation step decay rate
 
-    # class properties
-    type = 'Player'
-    state = 'Inactive'
-    player_name = ''
-    score = 0
-    lives = 3
-    firespeed = 500  # interval in milliseconds
-    position = pygame.Vector2(0,0)
-    orientation = 0
-    motion_vector = pygame.Vector2(0,0)
-    thrust_vector = pygame.Vector2(0,0)
-    rotate_step = MIN_ROTATION_STEP
-    last_rotate_direction = None
-
-
 
     def __init__(self, window):  # class constructor
+        # class properties
+        self.player_name = ''
+        self.score = 0
+        self.lives = 3
+        self.position = pygame.Vector2(0,0)
+        self.orientation = 0
+        self.motion_vector = pygame.Vector2(0,0)
+        self.thrust_vector = pygame.Vector2(0,0)
+        self.rotate_step = self.MIN_ROTATION_STEP
+        self.last_rotate_direction = None
+        self.last_fire = 0 # time in milliseconds since last fired
+        self.fire_speed = 100 # interval in millisecond between firing
+        self.projectile_speed = 3  # speed of fired projectile
+
         pygame.sprite.Sprite.__init__(self)  # init the parent class
         self.window = window  # store a link to the window obj so we can query info about it
         self.ship_original = pygame.image.load(os.path.join(SPRITEDIR, 'player.png'))#.convert()
@@ -85,33 +87,22 @@ class Player(pygame.sprite.Sprite):
         if self.lives == 0:
             GameState = 'game over'
 
-    def fire(self):
-        timenow = pygame.time.get_ticks()
-        lastfire = 0
-        print(timenow, lastfire)
-        if (timenow - lastfire) > self.firespeed:
-            print('fire')
-        lastfire = timenow
-
 
     def rotate(self, direction):
         '''
         Generates the amount to rotate for the frame. The rotation step amount eases in.
         '''
-        # check when last rotated by milliseconds - this locks rotation rate to clock rather than tick
-        timenow = pygame.time.get_ticks()
-        if timenow - self.last_update > 16.6666:
-            if not self.last_rotate_direction:  #
-                self.last_rotate_direction = direction
-            if not direction == self.last_rotate_direction:
-                self.rotate_step = self.MIN_ROTATION_STEP
-                self.last_rotate_direction = direction
-            this_rotate = self.rotate_step
-            if direction == 'cw':
-                this_rotate = self.rotate_step *-1
-            self.orientation += this_rotate # add this rotate into ship orientation
-            self.rotate_step += 0.5  # increment the rotate step, so rate of rotation accelerates (up to max)
-            self.rotate_step = np.clip(self.rotate_step, 0, self.MAX_ROTATION_STEP)  # clamp to min/max
+        if not self.last_rotate_direction:  #
+            self.last_rotate_direction = direction
+        if not direction == self.last_rotate_direction:
+            self.rotate_step = self.MIN_ROTATION_STEP
+            self.last_rotate_direction = direction
+        this_rotate = self.rotate_step
+        if direction == 'cw':
+            this_rotate = self.rotate_step *-1
+        self.orientation += this_rotate # add this rotate into ship orientation
+        self.rotate_step += 0.5  # increment the rotate step, so rate of rotation accelerates (up to max)
+        self.rotate_step = np.clip(self.rotate_step, 0, self.MAX_ROTATION_STEP)  # clamp to min/max
 
     def thrust(self):
         self.image_original = self.shipthrust_original.copy()
@@ -162,6 +153,7 @@ class Player(pygame.sprite.Sprite):
 
         #self.last_update = timenow
         self.image_original = self.ship_original.copy()
+
 
 
 
@@ -252,7 +244,8 @@ class Asteroid(pygame.sprite.Sprite):
         self.position += self.motion_vector
         self.rect.center = self.position
 
-        
+
+
 
 class Projectile(pygame.sprite.Sprite):
     # global variables
@@ -260,29 +253,36 @@ class Projectile(pygame.sprite.Sprite):
 
     # static properties
     TYPE = 'Projectile'
-
-
-
-    def __init__(self, window, position, vector):  # class constructor
+    
+    
+    def __init__(self, window, position, ship_vector, ship_orientation, speed, spawntime):  # class constructor
         pygame.sprite.Sprite.__init__(self)  # init the parent class
 
         self.position = pygame.Vector2()
-        self.motion_vector = pygame.Vector2()
-        self.orientation = 0
-        self.life = 300  # milliseconds
+        self.position += position
+        self.speed = speed
+        self.orientation = ship_orientation
+        self.motion_vector = pygame.Vector2(0, self.speed*-1)
+        self.motion_vector= self.motion_vector.rotate(self.orientation*-1)
+        self.motion_vector += ship_vector
 
+        self.spawntime = spawntime
+        self.life = 5000  # milliseconds
+        #print('spawned projectile at {0} with vector {1}'.format(self.position, self.motion_vector))
         self.window = window
 
-        self.image_original = pygame.Surface((2, 10))
-        self.image_original.fill()
-
+        self.image_original = pygame.Surface((2, 2))
+        self.image_original.fill((COLOURS['GREEN']))
         self.image = self.image_original.copy()
-        self.image.set_colorkey((COLOURS['GREEN']))
         self.rect = self.image.get_rect()
         self.wraparound = False  # initially disable wraparound so we can spawn off screen
         self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
 
 
+
+    def update(self):
+        self.position += self.motion_vector
+        self.rect.center = self.position
 
 
 
@@ -311,44 +311,62 @@ def main(): # main game code
     # some constants...
     FPS = 120 # set frames per second
 
+    clock = pygame.time.Clock()
+    # create the window
+    window = Window(CAPTION='player movement test')  # instance a window for the game
+
     # keyboard mappings
     INPUT_ROTATE_CCW = 'left_arrow'
     INPUT_ROTATE_CW = 'right_arrow'
     INPUT_THRUST = 'up_arrow'
     INPUT_FIRE = 'space'
 
-    clock = pygame.time.Clock()
-    window = Window(CAPTION='player movement test')  # instance a window for the game
-    player = Player(window)
-    all_sprites = pygame.sprite.Group()  # all sprites are no24w in this group, makes update and draw easy!
-    all_sprites.add(player)
 
+    # spawn the player
+    player_sprites = pygame.sprite.Group()
+    player = Player(window)
+    player_sprites.add(player)
+
+    # spawn some asteroids!
+    asteroid_sprites = pygame.sprite.Group()
     asteroid_spawn_interval = 10000  # in milliseconds
     num_initial_asteroids = 8
-    asteroid_sprites = pygame.sprite.Group()
-    asteroid_list = []
 
+    asteroid_list = []
     for i in range(num_initial_asteroids):
-        print('spawning asteroid')
+        #print('spawning asteroid')
         ast = Asteroid(window)
         asteroid_list.append(ast)
         asteroid_sprites.add(ast)
 
+    # projectile trackers
+    projectile_sprites = pygame.sprite.Group()
+    projectile_list = []
 
 
     while True: # main game loop
         clock.tick(FPS)
+        timenow = pygame.time.get_ticks()
 
         keystate = pygame.key.get_pressed()
-        if keystate[pygame.K_LEFT]:
+        if keystate[pygame.K_a]:
             player.rotate(direction='ccw')
-        if keystate[pygame.K_RIGHT]:
+        if keystate[pygame.K_d]:
             player.rotate(direction='cw')
-        if keystate[pygame.K_UP]:
+        if keystate[pygame.K_w]:
             player.thrust()
 
         if keystate[pygame.K_SPACE]:
-            player.fire()
+            if (timenow - player.last_fire) > player.fire_speed:
+                # instance the projectile class here
+
+                projectile = Projectile(window=window, position=player.position, ship_vector=player.motion_vector,
+                                        ship_orientation=player.orientation, speed=player.projectile_speed, spawntime=timenow)
+                projectile_sprites.add(projectile)
+                projectile_list.append(projectile)
+                player.last_fire = timenow
+
+
 
         # Event handling
         for event in pygame.event.get():
@@ -363,14 +381,18 @@ def main(): # main game code
                 sys.exit()
 
 
+        # check projectiles and kill any that are over lifespan
+
         # Update
-        all_sprites.update()
+        player_sprites.update()
         asteroid_sprites.update()
+        projectile_sprites.update()
 
 
         # Draw
         window.DISPLAYSURF.fill((35, 35, 55))
-        all_sprites.draw(window.DISPLAYSURF)
+        projectile_sprites.draw(window.DISPLAYSURF)
+        player_sprites.draw(window.DISPLAYSURF)
         asteroid_sprites.draw(window.DISPLAYSURF)
 
 
@@ -380,6 +402,8 @@ def main(): # main game code
 
 if __name__ == '__main__':
     main()
+
+
 
 
 
