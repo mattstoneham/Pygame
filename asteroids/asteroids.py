@@ -18,7 +18,7 @@ import math
 GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]
 SPRITEDIR = os.path.join(GAMEDIR, 'sprites')
 GameState = 'menu screen'
-COLOURS = {'BLACK':(0,0,0)}
+COLOURS = {'BLACK': (0, 0, 0), 'GREEN': (0, 255, 0)}
 
 class Window():
 
@@ -52,6 +52,7 @@ class Player(pygame.sprite.Sprite):
     player_name = ''
     score = 0
     lives = 3
+    firespeed = 500  # interval in milliseconds
     position = pygame.Vector2(0,0)
     orientation = 0
     motion_vector = pygame.Vector2(0,0)
@@ -83,6 +84,15 @@ class Player(pygame.sprite.Sprite):
         self.lives -= 1
         if self.lives == 0:
             GameState = 'game over'
+
+    def fire(self):
+        timenow = pygame.time.get_ticks()
+        lastfire = 0
+        print(timenow, lastfire)
+        if (timenow - lastfire) > self.firespeed:
+            print('fire')
+        lastfire = timenow
+
 
     def rotate(self, direction):
         '''
@@ -161,32 +171,31 @@ class Asteroid(pygame.sprite.Sprite):
     global GameState, SPRITEDIR, COLOURS
 
     # static properties
+    TYPE = 'Asteroid'
     MIN_VECTOR = 0.1
     MAX_VECTOR = 0.75
     MIN_ROTATE_SPEED = 0
     MAX_ROTATE_SPEED = 10
     SPAWN_SCREEN_PAD = -250
 
-    # class properties
-    type = 'Asteroid'
-    #position = np.array([0.0,0.0])
-    orientation = 0
-    rotation_speed = 1
-    #motion_vector = np.array([0.0,0.0])
-    stage = 1
-    health = 100
-
-
     # resource definitions
-    asteroid_sprites = {}
-    asteroid_sprites_a = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png',}
-    asteroid_sprites_b = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png',}
-    asteroid_sprites_c = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png',}
-    asteroid_sprites_d = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png',}
+    asteroid_sprites_a = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png'}
+    asteroid_sprites_b = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png'}
+    asteroid_sprites_c = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png'}
+    asteroid_sprites_d = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png'}
 
 
     def __init__(self, window):  # class constructor
         pygame.sprite.Sprite.__init__(self)  # init the parent class
+
+        self.asteroid_sprites = {}
+        self.position = pygame.Vector2()
+        self.motion_vector = pygame.Vector2()
+        self.orientation = 0
+        self.rotation_speed = 1
+        self.stage = 1
+        self.health = 100
+
         self.window = window
         # pick random sprite set
         self.asteroid_sprites = np.random.choice([self.asteroid_sprites_a, self.asteroid_sprites_b,
@@ -199,7 +208,6 @@ class Asteroid(pygame.sprite.Sprite):
         self.wraparound = False  # initially disable wraparound so we can spawn off screen
         self.screenpadding = (self.image_original.get_rect().size[0] / 2) #  set wrap screen padding to half sprite size
 
-        self.orientation = random.randint(0, 360)
 
         # pick random side to spawn - top, left, right, bottom
         spawnside = np.random.choice(['top', 'bottom', 'left', 'right'], 1)[0]
@@ -246,6 +254,35 @@ class Asteroid(pygame.sprite.Sprite):
 
         
 
+class Projectile(pygame.sprite.Sprite):
+    # global variables
+    global GameState, SPRITEDIR, COLOURS
+
+    # static properties
+    TYPE = 'Projectile'
+
+
+
+    def __init__(self, window, position, vector):  # class constructor
+        pygame.sprite.Sprite.__init__(self)  # init the parent class
+
+        self.position = pygame.Vector2()
+        self.motion_vector = pygame.Vector2()
+        self.orientation = 0
+        self.life = 300  # milliseconds
+
+        self.window = window
+
+        self.image_original = pygame.Surface((2, 10))
+        self.image_original.fill()
+
+        self.image = self.image_original.copy()
+        self.image.set_colorkey((COLOURS['GREEN']))
+        self.rect = self.image.get_rect()
+        self.wraparound = False  # initially disable wraparound so we can spawn off screen
+        self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
+
+
 
 
 
@@ -267,24 +304,6 @@ class Explosion(pygame.sprite.Sprite):
 
 
 
-class Projectile(pygame.sprite.Sprite):
-
-    # global variables
-    global GameState, SPRITEDIR
-
-    # resources
-        # explosion sprites here
-
-    # class properties
-    Type = 'Asteroid'
-    Draw = False
-
-    def __init__(self):  # class constructor
-        pygame.sprite.Sprite.__init__(self)  # init the parent class
-
-
-
-
 
 def main(): # main game code
 
@@ -301,7 +320,7 @@ def main(): # main game code
     clock = pygame.time.Clock()
     window = Window(CAPTION='player movement test')  # instance a window for the game
     player = Player(window)
-    all_sprites = pygame.sprite.Group()  # all sprites are now in this group, makes update and draw easy!
+    all_sprites = pygame.sprite.Group()  # all sprites are no24w in this group, makes update and draw easy!
     all_sprites.add(player)
 
     asteroid_spawn_interval = 10000  # in milliseconds
@@ -327,6 +346,9 @@ def main(): # main game code
             player.rotate(direction='cw')
         if keystate[pygame.K_UP]:
             player.thrust()
+
+        if keystate[pygame.K_SPACE]:
+            player.fire()
 
         # Event handling
         for event in pygame.event.get():
