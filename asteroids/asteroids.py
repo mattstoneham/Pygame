@@ -4,21 +4,21 @@ import pygame, sys, os
 from pygame.locals import *
 import numpy as np
 import random
-import math
 
 
 
 
-#nparray = np.array([0,0])
-#nparray[1] = 6
-#for m in dir(nparray):
-#    print(m)
+
 
 # global variables
 GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]
 SPRITEDIR = os.path.join(GAMEDIR, 'sprites')
 GameState = 'menu screen'
 COLOURS = {'BLACK': (0, 0, 0), 'GREEN': (0, 255, 0)}
+player_sprites = pygame.sprite.Group()
+asteroid_sprites = pygame.sprite.Group()
+projectile_sprites = pygame.sprite.Group()
+
 
 class Window():
 
@@ -40,42 +40,84 @@ class SpaceObject(pygame.sprite.Sprite):
     global GameState, SPRITEDIR, COLOURS
 
     def __init__(self, window, spritesize = (20, 20)):
-        pygame.sprite.Sprite.__init__(self)  # init the parent class
+        pygame.sprite.Sprite.__init__(self)         # init the parent class
         #print('SpaceObject init')
 
-        self.window = window
+        self.window = window                        # main window for querying stuff like screen size
 
-        self.position = pygame.Vector2(0, 0)
-        self.orientation = 0
-        self.motion_vector = pygame.Vector2(0, 0)
+        self.position = pygame.Vector2(0, 0)        # screen space position of the sprite
+        self.orientation = 0                        # orientation of the sprite in degrees
+        self.motion_vector = pygame.Vector2(0, 0)   # the motion vector of the sprite
+        self.wraparound = False                     # enable/disable screen wraparound
+        self.damage = 100                           # damage this object does to another on collision
+        self.health = 100                           # this object health
+        self.lives = 1                              # this object number of lives
+
+        self.do_collision_check = False             # enable/disable collision checks for this sprite
+        self.last_collision_check = 0               # time in milliseconds of last collision check
 
         self.image_original = pygame.Surface(spritesize)
         self.image_original.fill((COLOURS['GREEN']))
         self.image = self.image_original.copy()
+
+        self.rebuild() # reset rect, radius and screen wrap padding values to new loaded image
+
+
+
+    def rebuild(self):  # rebuilds sprite details - rect, radius and screen wrap padding
         self.rect = self.image.get_rect()
-        self.wraparound = False  # initially disable wraparound so we can spawn off screen
-        self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
+        self.screenpadding = (self.image.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
+        # store radius for collision checks
+        rectsize = self.image.get_rect().size
+        if rectsize[0] > rectsize[1]:
+            self.radius = rectsize[0] / 2
+        else:
+            self.radius = rectsize[1] / 2
+
+    def on_collide(self, collide_with):
+        # what to do when a collision is detected
+        # get damage value of colliding object
+        # subtract from self health
+        # call on_collide function of the other object, passing this one
+        pass
+
+
+    def collision_check(self, objects=[]):
+        # checks for collisions against sprites in passed list
+        for object in objects:
+            if pygame.sprite.collide_circle(self, object):
+                print('collision event: {0} {1}'.format(self, object))
+                self.on_collide(collide_with=object)
+                break  # run no further collision checks if collide detected
+
+
+
 
     def set_wraparound(self):
         # wraparound behaviour, false by default. This method can be overwritten to modify this (see Asteroid class)
         return False
 
     def update(self):
-        self.wraparound = self.set_wraparound()  # check if conditions have been met to enable/disable wraparound
+        if self.health > 0:
+            # update position of sprite and rect for this frame
+            self.wraparound = self.set_wraparound()  # check if conditions have been met to enable/disable wraparound
 
-        if self.wraparound:
-            # screen position wrap around
-            if self.position.x < -self.screenpadding:
-                self.position.x = self.window.WINDOWSIZE[0] + self.screenpadding
-            if self.position.x > self.window.WINDOWSIZE[0] + self.screenpadding:
-                self.position.x = -self.screenpadding
-            if self.position.y < -self.screenpadding:
-                self.position.y = self.window.WINDOWSIZE[1] + self.screenpadding
-            if self.position.y > self.window.WINDOWSIZE[1] + self.screenpadding:
-                self.position.y = -self.screenpadding
+            if self.wraparound:
+                # screen position wrap around
+                if self.position.x < -self.screenpadding:
+                    self.position.x = self.window.WINDOWSIZE[0] + self.screenpadding
+                if self.position.x > self.window.WINDOWSIZE[0] + self.screenpadding:
+                    self.position.x = -self.screenpadding
+                if self.position.y < -self.screenpadding:
+                    self.position.y = self.window.WINDOWSIZE[1] + self.screenpadding
+                if self.position.y > self.window.WINDOWSIZE[1] + self.screenpadding:
+                    self.position.y = -self.screenpadding
 
-        self.position += self.motion_vector
-        self.rect.center = self.position
+            self.position += self.motion_vector
+            self.rect.center = self.position
+        else:
+            # unless heath has dropped to zero or below
+            print('{0} health reached zero'.format(self))
 
 
 
@@ -217,24 +259,25 @@ class Asteroid(SpaceObject):
 
     def __init__(self, window):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
-        #print('Asteroid init (inherit from SpaceObject')
 
-        self.asteroid_sprites = {}
+        self.window = window
 
         self.rotation_speed = 1
         self.stage = 1
         self.health = 100
+        self.do_collision_check = False
 
-        self.window = window
+
         # pick random sprite set
+        self.asteroid_sprites = {}
         self.asteroid_sprites = np.random.choice([self.asteroid_sprites_a, self.asteroid_sprites_b,
                                                   self.asteroid_sprites_c, self.asteroid_sprites_d], 1)[0]
         self.image_original = pygame.image.load(os.path.join(SPRITEDIR, self.asteroid_sprites[self.stage]))
         self.image_original = pygame.transform.smoothscale(self.image_original, (80, 80))
-        self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
         self.image = self.image_original.copy()
         self.image.set_colorkey((COLOURS['BLACK']))
-        self.rect = self.image.get_rect()
+
+        self.rebuild()  # reset rect, radius and screen wrap padding values to new loaded image
 
 
         # SPAWNING
@@ -286,13 +329,17 @@ class Projectile(SpaceObject):
         self.motion_vector = self.motion_vector.rotate(self.orientation * -1)
         self.motion_vector += ship_vector
 
+        self.do_collision_check = True
         self.spawntime = spawntime
+        self.health = 1
+        self.damage = 100
         self.lifespan = 2000  # milliseconds
         # print('spawned projectile at {0} with vector {1}'.format(self.position, self.motion_vector))
         self.window = window
 
-        self.rect = self.image.get_rect()
-        self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
+        self.rebuild()
+        #self.rect = self.image.get_rect()
+        #self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
 
     def set_wraparound(self):
         return True
@@ -314,7 +361,8 @@ def main(): # main game code
 
     pygame.init()
     # some constants...
-    FPS = 120 # set frames per second
+    FPS = 120               # set frames per second
+    COLLISION_TICK = 16     # tick interval in milliseconds for collision detection
 
     clock = pygame.time.Clock()
     # create the window
@@ -328,12 +376,12 @@ def main(): # main game code
 
 
     # spawn the player
-    player_sprites = pygame.sprite.Group()
+    #player_sprites = pygame.sprite.Group()
     player = Player(window)
     player_sprites.add(player)
 
     # spawn some asteroids!
-    asteroid_sprites = pygame.sprite.Group()
+    #asteroid_sprites = pygame.sprite.Group()
     asteroid_spawn_interval = 10000  # in milliseconds
     num_initial_asteroids = 8
 
@@ -341,12 +389,10 @@ def main(): # main game code
     for i in range(num_initial_asteroids):
         #print('spawning asteroid')
         ast = Asteroid(window)
-        asteroid_list.append(ast)
         asteroid_sprites.add(ast)
 
     # projectile trackers
-    projectile_sprites = pygame.sprite.Group()
-    projectile_list = []
+    #projectile_sprites = pygame.sprite.Group()
 
 
     while True: # main game loop
@@ -354,12 +400,10 @@ def main(): # main game code
         timenow = pygame.time.get_ticks()
 
 
-        # check for end-of-life projectiles
-        for projectile in projectile_list:
+        # check for end-of-life projectiles and kill
+        for projectile in projectile_sprites:
             if (projectile.spawntime + projectile.lifespan) < timenow:
-                # kill the projectile
                 pygame.sprite.Sprite.kill(projectile)
-
 
 
         # input handling
@@ -378,7 +422,6 @@ def main(): # main game code
                 projectile = Projectile(window=window, position=player.position, ship_vector=player.motion_vector,
                                         ship_orientation=player.orientation, speed=player.projectile_speed, spawntime=timenow)
                 projectile_sprites.add(projectile)
-                projectile_list.append(projectile)
                 player.last_fire = timenow
 
 
@@ -397,7 +440,12 @@ def main(): # main game code
                 sys.exit()
 
 
-        # check projectiles and kill any that are over lifespan
+        # Collision checks
+        for projectile in projectile_sprites:#
+            if (timenow - projectile.last_collision_check) > COLLISION_TICK:
+                projectile.collision_check(asteroid_sprites)
+                projectile.last_collision_check = timenow
+
 
         # Update
         player_sprites.update()
@@ -418,6 +466,9 @@ def main(): # main game code
 
 if __name__ == '__main__':
     main()
+
+
+
 
 
 
