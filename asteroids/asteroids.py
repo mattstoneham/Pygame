@@ -39,7 +39,7 @@ class SpaceObject(pygame.sprite.Sprite):
 
     global GameState, SPRITEDIR, COLOURS
 
-    def __init__(self, window):
+    def __init__(self, window, spritesize = (20, 20)):
         pygame.sprite.Sprite.__init__(self)  # init the parent class
         #print('SpaceObject init')
 
@@ -49,7 +49,7 @@ class SpaceObject(pygame.sprite.Sprite):
         self.orientation = 0
         self.motion_vector = pygame.Vector2(0, 0)
 
-        self.image_original = pygame.Surface((20, 20))
+        self.image_original = pygame.Surface(spritesize)
         self.image_original.fill((COLOURS['GREEN']))
         self.image = self.image_original.copy()
         self.rect = self.image.get_rect()
@@ -61,8 +61,7 @@ class SpaceObject(pygame.sprite.Sprite):
         return False
 
     def update(self):
-        if not self.wraparound:
-            self.wraparound = self.set_wraparound()  # check if conditions have been met to enable/disable wraparound
+        self.wraparound = self.set_wraparound()  # check if conditions have been met to enable/disable wraparound
 
         if self.wraparound:
             # screen position wrap around
@@ -266,11 +265,9 @@ class Asteroid(SpaceObject):
 
 
     def set_wraparound(self):  # overrides inherited method to allow spawning off screen, with wraparound set to true once visible
-        self.wraparound = False
-        if not self.wraparound:  # check to see if we should enable wraparound positioning, this is disabled at first
-            if self.position.x > 0 and self.position.x < self.window.WINDOWSIZE[0]:
-                if self.position.y > 0 and self.position.y < self.window.WINDOWSIZE[1]:
-                    self.wraparound = True
+        if self.position.x > 0 and self.position.x < self.window.WINDOWSIZE[0]:
+            if self.position.y > 0 and self.position.y < self.window.WINDOWSIZE[1]:
+                self.wraparound = True
         return self.wraparound
 
 
@@ -280,7 +277,7 @@ class Projectile(SpaceObject):
     TYPE = 'Projectile'
 
     def __init__(self, window, position, ship_vector, ship_orientation, speed, spawntime):  # class constructor
-        SpaceObject.__init__(self, window)  # init the parent class
+        SpaceObject.__init__(self, window, spritesize=(2, 2))  # init the parent class
 
         self.position += position
         self.speed = speed
@@ -290,71 +287,24 @@ class Projectile(SpaceObject):
         self.motion_vector += ship_vector
 
         self.spawntime = spawntime
-        self.life = 5000  # milliseconds
+        self.lifespan = 2000  # milliseconds
         # print('spawned projectile at {0} with vector {1}'.format(self.position, self.motion_vector))
         self.window = window
 
-        self.image_original = pygame.Surface((2, 2))
-        self.image_original.fill((COLOURS['GREEN']))
-        self.image = self.image_original.copy()
         self.rect = self.image.get_rect()
         self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
 
-
-
-class Projectile_old(pygame.sprite.Sprite):
-    # global variables
-    global GameState, SPRITEDIR, COLOURS
-
-    # static properties
-    TYPE = 'Projectile'
-    
-    
-    def __init__(self, window, position, ship_vector, ship_orientation, speed, spawntime):  # class constructor
-        pygame.sprite.Sprite.__init__(self)  # init the parent class
-
-        self.position = pygame.Vector2()
-        self.position += position
-        self.speed = speed
-        self.orientation = ship_orientation
-        self.motion_vector = pygame.Vector2(0, self.speed*-1)
-        self.motion_vector= self.motion_vector.rotate(self.orientation*-1)
-        self.motion_vector += ship_vector
-
-        self.spawntime = spawntime
-        self.life = 5000  # milliseconds
-        #print('spawned projectile at {0} with vector {1}'.format(self.position, self.motion_vector))
-        self.window = window
-
-        self.image_original = pygame.Surface((2, 2))
-        self.image_original.fill((COLOURS['GREEN']))
-        self.image = self.image_original.copy()
-        self.rect = self.image.get_rect()
-        self.wraparound = False  # initially disable wraparound so we can spawn off screen
-        self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
+    def set_wraparound(self):
+        return True
 
 
 
-    def update(self):
-        self.position += self.motion_vector
-        self.rect.center = self.position
-
-
-
-class Explosion(pygame.sprite.Sprite):
-
-    # global variables
-    global GameState, SPRITEDIR
+class Explosion(SpaceObject):
 
     # resources
-        # explosion sprites here
 
-    # class properties
-    Type = 'Asteroid'
-    Draw = False
-
-    def __init__(self, SpawnLocation):  # class constructor
-        pygame.sprite.Sprite.__init__(self)  # init the parent class
+    def __init__(self, window):  # class constructor
+        SpaceObject.__init__(self, window)  # init the parent class
 
 
 
@@ -403,6 +353,17 @@ def main(): # main game code
         clock.tick(FPS)
         timenow = pygame.time.get_ticks()
 
+
+        # check for end-of-life projectiles
+        for projectile in projectile_list:
+            if (projectile.spawntime + projectile.lifespan) < timenow:
+                # kill the projectile
+                pygame.sprite.Sprite.kill(projectile)
+
+
+
+        # input handling
+
         keystate = pygame.key.get_pressed()
         if keystate[pygame.K_a]:
             player.rotate(direction='ccw')
@@ -410,7 +371,6 @@ def main(): # main game code
             player.rotate(direction='cw')
         if keystate[pygame.K_w]:
             player.thrust()
-
         if keystate[pygame.K_SPACE]:
             if (timenow - player.last_fire) > player.fire_speed:
                 # instance the projectile class here
@@ -424,6 +384,7 @@ def main(): # main game code
 
 
         # Event handling
+
         for event in pygame.event.get():
 
             # collision event check and handling
