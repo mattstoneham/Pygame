@@ -35,6 +35,50 @@ class Window():
 
 
 
+class SpaceObject(pygame.sprite.Sprite):
+
+    global GameState, SPRITEDIR, COLOURS
+
+    def __init__(self, window):
+        pygame.sprite.Sprite.__init__(self)  # init the parent class
+        #print('SpaceObject init')
+
+        self.window = window
+
+        self.position = pygame.Vector2(0, 0)
+        self.orientation = 0
+        self.motion_vector = pygame.Vector2(0, 0)
+
+        self.image_original = pygame.Surface((20, 20))
+        self.image_original.fill((COLOURS['GREEN']))
+        self.image = self.image_original.copy()
+        self.rect = self.image.get_rect()
+        self.wraparound = False  # initially disable wraparound so we can spawn off screen
+        self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
+
+    def set_wraparound(self):
+        # wraparound behaviour, false by default. This method can be overwritten to modify this (see Asteroid class)
+        return False
+
+    def update(self):
+        if not self.wraparound:
+            self.wraparound = self.set_wraparound()  # check if conditions have been met to enable/disable wraparound
+
+        if self.wraparound:
+            # screen position wrap around
+            if self.position.x < -self.screenpadding:
+                self.position.x = self.window.WINDOWSIZE[0] + self.screenpadding
+            if self.position.x > self.window.WINDOWSIZE[0] + self.screenpadding:
+                self.position.x = -self.screenpadding
+            if self.position.y < -self.screenpadding:
+                self.position.y = self.window.WINDOWSIZE[1] + self.screenpadding
+            if self.position.y > self.window.WINDOWSIZE[1] + self.screenpadding:
+                self.position.y = -self.screenpadding
+
+        self.position += self.motion_vector
+        self.rect.center = self.position
+
+
 
 class Player(pygame.sprite.Sprite):
 
@@ -51,6 +95,8 @@ class Player(pygame.sprite.Sprite):
 
 
     def __init__(self, window):  # class constructor
+        pygame.sprite.Sprite.__init__(self)  # init the parent class
+
         # class properties
         self.player_name = ''
         self.score = 0
@@ -65,7 +111,6 @@ class Player(pygame.sprite.Sprite):
         self.fire_speed = 100 # interval in millisecond between firing
         self.projectile_speed = 3  # speed of fired projectile
 
-        pygame.sprite.Sprite.__init__(self)  # init the parent class
         self.window = window  # store a link to the window obj so we can query info about it
         self.ship_original = pygame.image.load(os.path.join(SPRITEDIR, 'player.png'))#.convert()
         self.ship_original = pygame.transform.smoothscale(self.ship_original, (26, 38))
@@ -155,12 +200,7 @@ class Player(pygame.sprite.Sprite):
         self.image_original = self.ship_original.copy()
 
 
-
-
-class Asteroid(pygame.sprite.Sprite):
-
-    # global variables
-    global GameState, SPRITEDIR, COLOURS
+class Asteroid(SpaceObject):
 
     # static properties
     TYPE = 'Asteroid'
@@ -168,7 +208,7 @@ class Asteroid(pygame.sprite.Sprite):
     MAX_VECTOR = 0.75
     MIN_ROTATE_SPEED = 0
     MAX_ROTATE_SPEED = 10
-    SPAWN_SCREEN_PAD = -250
+    SPAWN_SCREEN_PAD = -100
 
     # resource definitions
     asteroid_sprites_a = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png'}
@@ -176,14 +216,12 @@ class Asteroid(pygame.sprite.Sprite):
     asteroid_sprites_c = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png'}
     asteroid_sprites_d = {1: 'asteroid_01_a.png', 2: 'asteroid_02_a.png', 3: 'asteroid_03_a.png'}
 
-
     def __init__(self, window):  # class constructor
-        pygame.sprite.Sprite.__init__(self)  # init the parent class
+        SpaceObject.__init__(self, window)  # init the parent class
+        #print('Asteroid init (inherit from SpaceObject')
 
         self.asteroid_sprites = {}
-        self.position = pygame.Vector2()
-        self.motion_vector = pygame.Vector2()
-        self.orientation = 0
+
         self.rotation_speed = 1
         self.stage = 1
         self.health = 100
@@ -194,12 +232,13 @@ class Asteroid(pygame.sprite.Sprite):
                                                   self.asteroid_sprites_c, self.asteroid_sprites_d], 1)[0]
         self.image_original = pygame.image.load(os.path.join(SPRITEDIR, self.asteroid_sprites[self.stage]))
         self.image_original = pygame.transform.smoothscale(self.image_original, (80, 80))
+        self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
         self.image = self.image_original.copy()
         self.image.set_colorkey((COLOURS['BLACK']))
         self.rect = self.image.get_rect()
-        self.wraparound = False  # initially disable wraparound so we can spawn off screen
-        self.screenpadding = (self.image_original.get_rect().size[0] / 2) #  set wrap screen padding to half sprite size
 
+
+        # SPAWNING
 
         # pick random side to spawn - top, left, right, bottom
         spawnside = np.random.choice(['top', 'bottom', 'left', 'right'], 1)[0]
@@ -210,44 +249,60 @@ class Asteroid(pygame.sprite.Sprite):
         # pick random (range constrained) position and vector rotate to start
         if spawnside == 'top':
             self.position = pygame.Vector2(random.randint(0, window.WINDOWSIZE[0]), self.SPAWN_SCREEN_PAD)
-            self.motion_vector = self.motion_vector.rotate((random.randint(-80, 80))-1)
+            self.motion_vector = self.motion_vector.rotate((random.randint(-80, 80)) - 1)
         if spawnside == 'left':
             self.position = pygame.Vector2(self.SPAWN_SCREEN_PAD, random.randint(0, window.WINDOWSIZE[1]))
-            self.motion_vector = self.motion_vector.rotate((random.randint(10, 170))*-1)
+            self.motion_vector = self.motion_vector.rotate((random.randint(10, 170)) * -1)
         if spawnside == 'right':
-            self.position = pygame.Vector2(window.WINDOWSIZE[0] - self.SPAWN_SCREEN_PAD, random.randint(0, window.WINDOWSIZE[1]))
-            self.motion_vector = self.motion_vector.rotate((random.randint(190, 350))*-1)
+            self.position = pygame.Vector2(window.WINDOWSIZE[0] - self.SPAWN_SCREEN_PAD,
+                                           random.randint(0, window.WINDOWSIZE[1]))
+            self.motion_vector = self.motion_vector.rotate((random.randint(190, 350)) * -1)
         if spawnside == 'bottom':
-            self.position = pygame.Vector2(random.randint(0, window.WINDOWSIZE[0]), window.WINDOWSIZE[1] - self.SPAWN_SCREEN_PAD)
-            self.motion_vector = self.motion_vector.rotate((random.randint(100, 260))-1)
+            self.position = pygame.Vector2(random.randint(0, window.WINDOWSIZE[0]),
+                                           window.WINDOWSIZE[1] - self.SPAWN_SCREEN_PAD)
+            self.motion_vector = self.motion_vector.rotate((random.randint(100, 260)) - 1)
 
         self.rect.center = self.position
 
 
-    def update(self):
-        
+    def set_wraparound(self):  # overrides inherited method to allow spawning off screen, with wraparound set to true once visible
+        self.wraparound = False
         if not self.wraparound:  # check to see if we should enable wraparound positioning, this is disabled at first
             if self.position.x > 0 and self.position.x < self.window.WINDOWSIZE[0]:
                 if self.position.y > 0 and self.position.y < self.window.WINDOWSIZE[1]:
                     self.wraparound = True
-        
-        # screen position wrap around
-        if self.position.x < -self.screenpadding:
-            self.position.x = self.window.WINDOWSIZE[0] + self.screenpadding
-        if self.position.x > self.window.WINDOWSIZE[0] + self.screenpadding:
-            self.position.x = -self.screenpadding
-        if self.position.y < -self.screenpadding:
-            self.position.y = self.window.WINDOWSIZE[1] + self.screenpadding
-        if self.position.y > self.window.WINDOWSIZE[1] + self.screenpadding:
-            self.position.y = -self.screenpadding
-        
-        self.position += self.motion_vector
-        self.rect.center = self.position
+        return self.wraparound
+
+
+class Projectile(SpaceObject):
+
+    # static properties
+    TYPE = 'Projectile'
+
+    def __init__(self, window, position, ship_vector, ship_orientation, speed, spawntime):  # class constructor
+        SpaceObject.__init__(self, window)  # init the parent class
+
+        self.position += position
+        self.speed = speed
+        self.orientation = ship_orientation
+        self.motion_vector.xy = 0, self.speed * -1
+        self.motion_vector = self.motion_vector.rotate(self.orientation * -1)
+        self.motion_vector += ship_vector
+
+        self.spawntime = spawntime
+        self.life = 5000  # milliseconds
+        # print('spawned projectile at {0} with vector {1}'.format(self.position, self.motion_vector))
+        self.window = window
+
+        self.image_original = pygame.Surface((2, 2))
+        self.image_original.fill((COLOURS['GREEN']))
+        self.image = self.image_original.copy()
+        self.rect = self.image.get_rect()
+        self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
 
 
 
-
-class Projectile(pygame.sprite.Sprite):
+class Projectile_old(pygame.sprite.Sprite):
     # global variables
     global GameState, SPRITEDIR, COLOURS
 
