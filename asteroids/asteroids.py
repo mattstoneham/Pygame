@@ -80,19 +80,42 @@ class SpaceObject(pygame.sprite.Sprite):
 
     def collision_check(self, objects=[]):
         # checks for collisions against sprites in passed list
-        for object in objects:
-            if pygame.sprite.collide_circle(self, object):
-                #print('collision event: {0} {1}'.format(self, object))
-                self.on_collide(colliding_object=object)
-                break  # run no further collision checks if collide detected
+        if self.do_collision_check:
+            for object in objects:
+                if pygame.sprite.collide_circle(self, object):
+                    #print('collision event: {0} {1}'.format(self, object))
+                    self.on_collide(colliding_object=object)
+                    break  # run no further collision checks if collide detected
 
     def set_wraparound(self):
         # wraparound behaviour, false by default. This method can be overwritten to modify this (see Asteroid class)
         return False
 
+    def update_motion_vector(self):
+        # modify the motion vector here
+        pass
+
+    def update_orientation(self):
+        # modify the sprite rotation here
+        pass
+
+    def on_end_update(self):
+        # do something afer the update if required
+        pass
+
     def update(self):
         if self.health > 0:
-            # update position of sprite and rect for this frame
+            self.update_motion_vector()     # optionally change the motion vector
+            self.update_orientation()       # optionally change the orientation
+
+            # update sprite rotation
+            old_center = self.rect.center  # cache the center of the current sprite rect
+            self.image = pygame.transform.rotate(self.image_original, self.orientation)  # recreate image from clean transform of original
+            self.rect = self.image.get_rect()  # grab the rect of the new image
+            self.rect.center = old_center  # ... and position it in the same center as the previous one
+            self.image.set_colorkey(COLOURS['BLACK'])  # new image, so need to colour key
+
+            # update sprite position
             self.wraparound = self.set_wraparound()  # check if conditions have been met to enable/disable wraparound
 
             if self.wraparound:
@@ -113,39 +136,36 @@ class SpaceObject(pygame.sprite.Sprite):
             print('{0} health reached zero'.format(self))
             self.on_health_zero()
 
+        self.on_end_update()    # optionally, do something after the update
 
-class Player(pygame.sprite.Sprite):
-
-    # global variables
-    global GameState, SPRITEDIR, COLOURS
+class Player(SpaceObject):
 
     # static properties
     TYPE = 'Player'
     THRUST_V = pygame.Vector2(0,-0.05)  # the polar vector of a thrust impulse
-    MAX_ROTATION_STEP = 4  # the max step value (per frame) of a rotation
-    MIN_ROTATION_STEP = 0.001  # the min step value (per frame) of a rotation
-    INERTIA = 99.5  # decay rate (as a percentage) of the movement vector
-    ROTATION_DECAY = 97  # the rotation step decay rate
-
+    MAX_ROTATION_STEP = 4               # the max step value (per frame) of a rotation
+    MIN_ROTATION_STEP = 0.001           # the min step value (per frame) of a rotation
+    INERTIA = 99.5                      # motion vector decay rate (as a percentage) of the movement vector
+    ROTATION_DECAY = 97                 # the rotation step decay rate
 
     def __init__(self, window):  # class constructor
-        pygame.sprite.Sprite.__init__(self)  # init the parent class
+        SpaceObject.__init__(self, window)  # init the parent class
+
+        self.state = 'playing'  # dead, playing, exploding, teleporting
 
         # class properties
-        self.player_name = ''
-        self.score = 0
+        self.thrust_vector = pygame.Vector2(0,0)    # thrust vector, added to the motion vector
+        self.rotate_step = self.MIN_ROTATION_STEP   # rotation step, changes to give ease-in behaviour
+        self.last_rotate_direction = None           # rotate tracker, part of the rotation ease-in code
+        self.last_fire = 0                          # time in milliseconds since last fired
+        self.firing_interval = 200                  # interval in millisecond between firing
+        self.projectile_speed = 3                   # speed of fired projectile
         self.lives = 3
-        self.position = pygame.Vector2(0,0)
-        self.orientation = 0
-        self.motion_vector = pygame.Vector2(0,0)
-        self.thrust_vector = pygame.Vector2(0,0)
-        self.rotate_step = self.MIN_ROTATION_STEP
-        self.last_rotate_direction = None
-        self.last_fire = 0 # time in milliseconds since last fired
-        self.firing_interval = 200 # interval in millisecond between firing
-        self.projectile_speed = 3  # speed of fired projectile
+        self.do_collision_check = True
 
         self.window = window  # store a link to the window obj so we can query info about it
+
+        # load our sprites, keep an original as rotation is lossy!
         self.ship_original = pygame.image.load(os.path.join(SPRITEDIR, 'player.png'))#.convert()
         self.ship_original = pygame.transform.smoothscale(self.ship_original, (26, 38))
         self.shipthrust_original = pygame.image.load(os.path.join(SPRITEDIR, 'player_thrust.png'))#.convert()
@@ -153,30 +173,35 @@ class Player(pygame.sprite.Sprite):
         self.image_original = self.ship_original.copy()
         self.image = self.image_original.copy()  # this one will be the transformed result of ...orig
         self.image.set_colorkey((COLOURS['BLACK']))
-        self.screenpadding = (self.image_original.get_rect().size[0] / 2)
-        self.rect = self.image.get_rect()
+
+        self.rebuild()  # reset rect, radius and screen wrap padding values to new loaded image
+
+        # initial spawn position
         self.position.xy = window.get_center()[0], window.get_center()[1]
         self.rect.center = self.position
-        self.last_update = 0
 
-    def explode(self):  # triggered if collision between player and asteroid
-        self.state = 'Exploding'
-        self.draw = False  # set flag so ship isn't drawn until re-spawned
+    def on_health_zero(self):
         self.lives -= 1
+        print('Lost a life, you clumsy oaf')
+        self.state = 'exploding'
+        # remove from the play
         if self.lives == 0:
+            print('He\'s dead, Jim')
+            pygame.sprite.Sprite.kill(self)
             GameState = 'game over'
 
+    def set_wraparound(self):
+        return True
 
     def rotate(self, direction):
-        '''
-        Generates the amount to rotate for the frame. The rotation step amount eases in.
-        '''
-        if not self.last_rotate_direction:  #
+        # reset the rotation step to min if the rotation direction has changed
+        if not self.last_rotate_direction:
             self.last_rotate_direction = direction
         if not direction == self.last_rotate_direction:
             self.rotate_step = self.MIN_ROTATION_STEP
             self.last_rotate_direction = direction
         this_rotate = self.rotate_step
+
         if direction == 'cw':
             this_rotate = self.rotate_step *-1
         self.orientation += this_rotate # add this rotate into ship orientation
@@ -191,8 +216,14 @@ class Player(pygame.sprite.Sprite):
         # set thrust vector to zero, else it'll keep adding
         self.thrust_vector.xy = 0, 0
 
-    def update(self):
+    def update_motion_vector(self):
+        # decay the main vector
+        self.motion_vector.x = (self.motion_vector.x / 100) * self.INERTIA
+        self.motion_vector.y = (self.motion_vector.y / 100) * self.INERTIA
+        # add the thrust vector to the main motion vector
+        self.motion_vector += self.thrust_vector
 
+    def update_orientation(self):
         # update rotation
         # decay the rotation step
         self.rotate_step = (self.rotate_step / 100) * self.ROTATION_DECAY
@@ -202,34 +233,11 @@ class Player(pygame.sprite.Sprite):
             self.orientation -= 360
         if self.orientation < 0:
             self.orientation += 360
-        old_center = self.rect.center  # cache the center of the current sprite rect
-        self.image = pygame.transform.rotate(self.image_original, self.orientation)  # recreate image from clean transform of original
-        self.rect = self.image.get_rect()  # grab the rect of the new image
-        self.rect.center = old_center  # ... and position it in the same center as the previous one
-        self.image.set_colorkey(COLOURS['BLACK'])  # new image, so need to colour key
 
-        # update position
-        # decay the main vector
-        self.motion_vector.x = (self.motion_vector.x / 100) * self.INERTIA
-        self.motion_vector.y = (self.motion_vector.y / 100) * self.INERTIA
-        # add the thrust vector to the main motion vector
-        self.motion_vector += self.thrust_vector
-        # update the position with our new vector
-        self.position += self.motion_vector
-        # screen position wrap around
-        if self.position.x < -self.screenpadding:
-            self.position.x = self.window.WINDOWSIZE[0] + self.screenpadding
-        if self.position.x > self.window.WINDOWSIZE[0] + self.screenpadding:
-            self.position.x = -self.screenpadding
-        if self.position.y < -self.screenpadding:
-            self.position.y = self.window.WINDOWSIZE[1] + self.screenpadding
-        if self.position.y > self.window.WINDOWSIZE[1] + self.screenpadding:
-            self.position.y = -self.screenpadding
-        # finally, update the rect position by assigning the vect to rect.center
-        self.rect.center = self.position
-
-        # self.last_update = timenow
+    def on_end_update(self):
+        # do something afer the update
         self.image_original = self.ship_original.copy()
+
 
 
 class Asteroid(SpaceObject):
@@ -253,7 +261,6 @@ class Asteroid(SpaceObject):
 
         self.stage = stage
         self.health = 100
-        self.do_collision_check = False
         self.min_velocity = 0.05     # default values for 100 x 100 sprite
         self.max_velocity = 0.4    # default values for 100 x 100 sprite
         self.rotation_speed = 1     # default values for 100 x 100 sprite
@@ -349,7 +356,7 @@ class Projectile(SpaceObject):
         self.spawntime = spawntime
         self.health = 1
         self.damage = 100
-        self.lifespan = 2000  # milliseconds
+        self.lifespan = 1500  # milliseconds
         # print('spawned projectile at {0} with vector {1}'.format(self.position, self.motion_vector))
         self.window = window
 
@@ -361,15 +368,12 @@ class Projectile(SpaceObject):
         return True
 
 
-
 class Explosion(SpaceObject):
 
     # resources
 
     def __init__(self, window):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
-
-
 
 
 
@@ -446,10 +450,6 @@ def main(): # main game code
 
         for event in pygame.event.get():
 
-            # collision event check and handling
-            # if player/asteroid collide detected
-                # player.Explode()
-                # spawn an explosion
 
             if event.type == QUIT:
                 pygame.quit()
@@ -461,6 +461,11 @@ def main(): # main game code
             if (timenow - projectile.last_collision_check) > COLLISION_TICK:
                 projectile.collision_check(asteroid_sprites)
                 projectile.last_collision_check = timenow
+
+        for player in player_sprites:
+            if (timenow - player.last_collision_check) > COLLISION_TICK:
+                player.collision_check(asteroid_sprites)
+                player.last_collision_check = timenow
 
 
         # Update
@@ -485,6 +490,37 @@ if __name__ == '__main__':
 
 
 
+'''
+
+
+if player health zero
+    stop drawing ship
+    stop collision checking ship
+
+
+
+
+
+
+
+To Do:
+
+link projectile speed to player property
+player collision
+more asteroid spawning
+score, lives display
+teleporting
+add starting health to asteroid dict, plus hit but not die effect (flash)
+...for massive asteroids, add extra stages
+powerup drops from asteroids - lives, damage, fire rate, teleports
+add probability spread to asteroid types
+add explosions
+add flying saucer that shoots at you
+multiplayer
+multiplayer drops that affect the opponent - speed, instability?
+
+
+'''
 
 
 
