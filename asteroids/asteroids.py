@@ -14,7 +14,7 @@ import random
 GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]
 SPRITEDIR = os.path.join(GAMEDIR, 'sprites')
 GameState = 'menu screen'
-COLOURS = {'BLACK': (0, 0, 0), 'GREEN': (0, 255, 0)}
+COLOURS = {'BLACK': (0, 0, 0), 'GREEN': (0, 255, 0), 'L_BLUE': (130, 220, 255)}
 player_sprites = pygame.sprite.Group()
 asteroid_sprites = pygame.sprite.Group()
 projectile_sprites = pygame.sprite.Group()
@@ -57,11 +57,10 @@ class SpaceObject(pygame.sprite.Sprite):
         self.last_collision_check = 0               # time in milliseconds of last collision check
 
         self.image_original = pygame.Surface(spritesize)
-        self.image_original.fill((COLOURS['GREEN']))
+        self.image_original.fill((COLOURS['L_BLUE']))
         self.image = self.image_original.copy()
 
         self.rebuild() # reset rect, radius and screen wrap padding values to new loaded image
-
 
 
     def rebuild(self):  # rebuilds sprite details - rect, radius and screen wrap padding
@@ -74,20 +73,27 @@ class SpaceObject(pygame.sprite.Sprite):
         else:
             self.radius = rectsize[1] / 2
 
-    def on_collide(self, collide_with):
+
+    def on_health_zero(self):
+        pygame.sprite.Sprite.kill(self)
+
+
+
+    def on_collide(self, colliding_object, callback=True):
         # what to do when a collision is detected
-        # get damage value of colliding object
-        # subtract from self health
+        # get damage value of colliding object & subtract from self health
+        self.health -= colliding_object.damage
         # call on_collide function of the other object, passing this one
-        pass
+        if callback:
+            colliding_object.on_collide(self, callback=False)
 
 
     def collision_check(self, objects=[]):
         # checks for collisions against sprites in passed list
         for object in objects:
             if pygame.sprite.collide_circle(self, object):
-                print('collision event: {0} {1}'.format(self, object))
-                self.on_collide(collide_with=object)
+                #print('collision event: {0} {1}'.format(self, object))
+                self.on_collide(colliding_object=object)
                 break  # run no further collision checks if collide detected
 
 
@@ -118,6 +124,7 @@ class SpaceObject(pygame.sprite.Sprite):
         else:
             # unless heath has dropped to zero or below
             print('{0} health reached zero'.format(self))
+            self.on_health_zero()
 
 
 
@@ -305,6 +312,7 @@ class Asteroid(SpaceObject):
             self.motion_vector = self.motion_vector.rotate((random.randint(100, 260)) - 1)
 
         self.rect.center = self.position
+
 
 
     def set_wraparound(self):  # overrides inherited method to allow spawning off screen, with wraparound set to true once visible
