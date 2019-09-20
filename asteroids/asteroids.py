@@ -157,7 +157,7 @@ class Player(SpaceObject):
     def __init__(self, window):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
 
-        self.state = 'playing'  # dead, playing, exploding, awaiting respawn, teleporting
+        self.state = 'playing'  # dead, playing, awaiting respawn, teleporting
 
         # class properties
         self.thrust_vector = pygame.Vector2(0,0)    # thrust vector, added to the motion vector
@@ -189,10 +189,10 @@ class Player(SpaceObject):
 
     def on_health_zero(self):
         self.lives -= 1
-        print('Lost a life, you clumsy oaf')
-        self.state = 'exploding'
-        self.health = self.DEFAULT_HEALTH  # reset health
-        # remove from the play
+        if self.lives > 0:
+            print('Lost a life, you clumsy oaf')
+            self.state = 'awaiting respawn'
+            self.health = self.DEFAULT_HEALTH  # reset health
         if self.lives == 0:
             print('He\'s dead, Jim')
             pygame.sprite.Sprite.kill(self)  # maybe handle this in main function
@@ -404,10 +404,10 @@ def main(): # main game code
 
     # spawn the player
     #player_sprites = pygame.sprite.Group()
-    player = Player(window)
-    player_sprites.add(player)
-    player_update_sprites.add(player)
-    player_draw_sprites.add(player)
+    player1 = Player(window)
+    player_sprites.add(player1)
+    player_update_sprites.add(player1)
+    player_draw_sprites.add(player1)
 
     # spawn some asteroids!
     #asteroid_sprites = pygame.sprite.Group()
@@ -421,13 +421,35 @@ def main(): # main game code
         asteroid_sprites.add(ast)
 
     # projectile trackers
-    #projectile_sprites = pygame.sprite.Group()
+    # projectile_sprites = pygame.sprite.Group()
 
 
     while True: # main game loop
         clock.tick(FPS)
         timenow = pygame.time.get_ticks()
 
+        # Event handling
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+
+        # input handling
+        keystate = pygame.key.get_pressed()
+        if keystate[pygame.K_a]:
+            player1.rotate(direction='ccw')
+        if keystate[pygame.K_d]:
+            player1.rotate(direction='cw')
+        if keystate[pygame.K_w]:
+            player1.thrust()
+        if keystate[pygame.K_SPACE]:
+            if (timenow - player1.last_fire) > player1.firing_interval:
+                # instance the projectile class here
+
+                projectile = Projectile(window=window, position=player1.position, ship_vector=player1.motion_vector,
+                                        ship_orientation=player1.orientation, speed=player1.projectile_speed, spawntime=timenow)
+                projectile_sprites.add(projectile)
+                player1.last_fire = timenow
 
         # check for end-of-life projectiles and kill
         for projectile in projectile_sprites:
@@ -435,34 +457,6 @@ def main(): # main game code
                 pygame.sprite.Sprite.kill(projectile)
 
 
-        # input handling
-
-        keystate = pygame.key.get_pressed()
-        if keystate[pygame.K_a]:
-            player.rotate(direction='ccw')
-        if keystate[pygame.K_d]:
-            player.rotate(direction='cw')
-        if keystate[pygame.K_w]:
-            player.thrust()
-        if keystate[pygame.K_SPACE]:
-            if (timenow - player.last_fire) > player.firing_interval:
-                # instance the projectile class here
-
-                projectile = Projectile(window=window, position=player.position, ship_vector=player.motion_vector,
-                                        ship_orientation=player.orientation, speed=player.projectile_speed, spawntime=timenow)
-                projectile_sprites.add(projectile)
-                player.last_fire = timenow
-
-
-
-        # Event handling
-
-        for event in pygame.event.get():
-
-
-            if event.type == QUIT:
-                pygame.quit()
-                sys.exit()
 
 
         # Collision checks
@@ -477,7 +471,9 @@ def main(): # main game code
                 player.last_collision_check = timenow
 
 
-        # Check player states and manage group membership
+
+        # Check player states and manage group membership # dead, playing, awaiting respawn, teleporting
+        #for player in player_sprites:
             # if
 
         #
@@ -491,10 +487,11 @@ def main(): # main game code
         # Draw
         window.DISPLAYSURF.fill((35, 35, 55))
         projectile_sprites.draw(window.DISPLAYSURF)
-        player_draw_sprites.draw(window.DISPLAYSURF)
         asteroid_sprites.draw(window.DISPLAYSURF)
+        player_draw_sprites.draw(window.DISPLAYSURF)
 
 
+        # update display
         pygame.display.update()
 
 
@@ -507,13 +504,20 @@ if __name__ == '__main__':
 '''
 
 
-if player health zero
+if player health zero, but lives left
+    spawn an explosion at player position
     remove player from draw group (also stops collision)
+    remove player from update group
     store time
+    place player in awaiting respawn state
 
 
-
-
+the each tick
+    for each player awaiting respawn
+        check player respawn delay against current time
+        if time threshold reached
+        call player respawn method
+        set player invunerable for 3 seconds (should probably prevent firing)
 
 
 
