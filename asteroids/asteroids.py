@@ -11,9 +11,14 @@ GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]
 SPRITEDIR = os.path.join(GAMEDIR, 'sprites')
 GameState = 'menu screen'
 COLOURS = {'BLACK': (0, 0, 0), 'GREEN': (0, 255, 0), 'L_BLUE': (130, 220, 255)}
-player_sprites = pygame.sprite.Group()
-asteroid_sprites = pygame.sprite.Group()
-projectile_sprites = pygame.sprite.Group()
+
+player_sprites = pygame.sprite.Group()          # All player sprites
+player_draw_sprites = pygame.sprite.Group()     # Player sprites to draw
+player_update_sprites = pygame.sprite.Group()   # Player sprites to update
+
+asteroid_sprites = pygame.sprite.Group()        # All asteroids to draw and update
+projectile_sprites = pygame.sprite.Group()      # All projectiles to draw and update
+
 
 
 class Window(object):
@@ -147,11 +152,12 @@ class Player(SpaceObject):
     MIN_ROTATION_STEP = 0.001           # the min step value (per frame) of a rotation
     INERTIA = 99.5                      # motion vector decay rate (as a percentage) of the movement vector
     ROTATION_DECAY = 97                 # the rotation step decay rate
+    DEFAULT_HEALTH = 100
 
     def __init__(self, window):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
 
-        self.state = 'playing'  # dead, playing, exploding, teleporting
+        self.state = 'playing'  # dead, playing, exploding, awaiting respawn, teleporting
 
         # class properties
         self.thrust_vector = pygame.Vector2(0,0)    # thrust vector, added to the motion vector
@@ -162,6 +168,7 @@ class Player(SpaceObject):
         self.projectile_speed = 3                   # speed of fired projectile
         self.lives = 3
         self.do_collision_check = True
+        self.health = self.DEFAULT_HEALTH
 
         self.window = window  # store a link to the window obj so we can query info about it
 
@@ -184,11 +191,12 @@ class Player(SpaceObject):
         self.lives -= 1
         print('Lost a life, you clumsy oaf')
         self.state = 'exploding'
+        self.health = self.DEFAULT_HEALTH  # reset health
         # remove from the play
         if self.lives == 0:
             print('He\'s dead, Jim')
-            pygame.sprite.Sprite.kill(self)
-            GameState = 'game over'
+            pygame.sprite.Sprite.kill(self)  # maybe handle this in main function
+            self.state = 'dead'
 
     def set_wraparound(self):
         return True
@@ -237,7 +245,6 @@ class Player(SpaceObject):
     def on_end_update(self):
         # do something afer the update
         self.image_original = self.ship_original.copy()
-
 
 
 class Asteroid(SpaceObject):
@@ -399,11 +406,13 @@ def main(): # main game code
     #player_sprites = pygame.sprite.Group()
     player = Player(window)
     player_sprites.add(player)
+    player_update_sprites.add(player)
+    player_draw_sprites.add(player)
 
     # spawn some asteroids!
     #asteroid_sprites = pygame.sprite.Group()
     asteroid_spawn_interval = 10000  # in milliseconds
-    num_initial_asteroids = 8
+    num_initial_asteroids = 4
 
     asteroid_list = []
     for i in range(num_initial_asteroids):
@@ -462,22 +471,27 @@ def main(): # main game code
                 projectile.collision_check(asteroid_sprites)
                 projectile.last_collision_check = timenow
 
-        for player in player_sprites:
+        for player in player_draw_sprites:
             if (timenow - player.last_collision_check) > COLLISION_TICK:
                 player.collision_check(asteroid_sprites)
                 player.last_collision_check = timenow
 
 
+        # Check player states and manage group membership
+            # if
+
+        #
+
+
         # Update
-        player_sprites.update()
+        player_update_sprites.update()
         asteroid_sprites.update()
         projectile_sprites.update()
-
 
         # Draw
         window.DISPLAYSURF.fill((35, 35, 55))
         projectile_sprites.draw(window.DISPLAYSURF)
-        player_sprites.draw(window.DISPLAYSURF)
+        player_draw_sprites.draw(window.DISPLAYSURF)
         asteroid_sprites.draw(window.DISPLAYSURF)
 
 
@@ -494,8 +508,10 @@ if __name__ == '__main__':
 
 
 if player health zero
-    stop drawing ship
-    stop collision checking ship
+    remove player from draw group (also stops collision)
+    store time
+
+
 
 
 
