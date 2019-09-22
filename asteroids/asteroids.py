@@ -52,7 +52,8 @@ class SpaceObject(pygame.sprite.Sprite):
         self.damage = 100                           # damage this object does to another on collision
         self.health = 100                           # this object health
         self.lives = 1                              # this object number of lives
-
+        self._invulnerable = False                 # is the object invulnerable? - private, not to be directly modified
+        self._invulnerability_end = 0              # time when invulnerability ends
         self.do_collision_check = False             # enable/disable collision checks for this sprite
         self.last_collision_check = 0               # time in milliseconds of last collision check
 
@@ -72,19 +73,33 @@ class SpaceObject(pygame.sprite.Sprite):
         else:
             self.radius = rectsize[1] / 2
 
-    def on_health_zero(self):
+    def on_health_zero(self):  # what to do when sprite health hits zero
         pygame.sprite.Sprite.kill(self)
 
-    def on_collide(self, colliding_object, callback=True):
-        # what to do when a collision is detected
-        # get damage value of colliding object & subtract from self health
-        self.health -= colliding_object.damage
-        # call on_collide function of the other object, passing this one
+    def make_invulnerable(self, countdown=3000):  # make object invulnerable for countdown milliseconds
+        self._invulnerability_end = pygame.time.get_ticks() + countdown
+        self._invulnerable = True
+        self.on_invulnerable()
+
+    def on_invulnerable(self):  # what to do when object made invulnerable
+        # e.g. change sprite to add a shield effect
+        print('{0} is invulnerable '.format(self))
+
+    def on_end_invulnerable(self):  #waht to do when object made vulnerable
+        # e.g. change sprite back to remove shield effect
+        print('{0} is no longer invulnerable')
+
+    def on_collide(self, colliding_object, callback=True):  # what to do when a collision is detected
+        if self._invulnerable:
+            pass
+        else:
+            # get damage value of colliding object & subtract from self health
+            self.health -= colliding_object.damage
+        # call on_collide function of the other object, passing this one. Callback flag is to prevent recursion
         if callback:
             colliding_object.on_collide(self, callback=False)
 
-    def collision_check(self, objects=[]):
-        # checks for collisions against sprites in passed list
+    def collision_check(self, objects=[]):  # checks for collisions against sprites in passed list
         if self.do_collision_check:
             for object in objects:
                 if pygame.sprite.collide_circle(self, object):
@@ -104,12 +119,24 @@ class SpaceObject(pygame.sprite.Sprite):
         # modify the sprite rotation here
         pass
 
-    def on_end_update(self):
-        # do something afer the update if required
+    def before_update(self):
+        # do something before the update
         pass
 
-    def update(self):
+    def on_end_update(self):
+        # do something after the update
+        pass
+
+    def update(self):  # the main update method
+        self.before_update()
+
         if self.health > 0:
+            if self._invulnerable:  # check invulnerability countdown
+                if self._invulnerability_end < pygame.time.get_ticks():
+                    self._invulnerability_end = 0  # reset the end time
+                    self._invulnerable = False
+                    self.on_end_invulnerable()
+
             self.update_motion_vector()     # optionally change the motion vector
             self.update_orientation()       # optionally change the orientation
 
@@ -158,6 +185,7 @@ class Player(SpaceObject):
         SpaceObject.__init__(self, window)  # init the parent class
 
         self.state = 'playing'  # dead, playing, awaiting respawn, teleporting
+        self.sprite_state = 'default'
 
         # class properties
         self.thrust_vector = pygame.Vector2(0,0)    # thrust vector, added to the motion vector
@@ -166,20 +194,19 @@ class Player(SpaceObject):
         self.last_fire = 0                          # time in milliseconds since last fired
         self.firing_interval = 200                  # interval in millisecond between firing
         self.projectile_speed = 3                   # speed of fired projectile
-        self.lives = 3
-        self.do_collision_check = True
-        self.health = self.DEFAULT_HEALTH
+        self.lives = 3                              # number of player lives
+        self.do_collision_check = True              # whether to perform the collision check
+        self.health = self.DEFAULT_HEALTH           # set heath to default value
 
         self.window = window  # store a link to the window obj so we can query info about it
 
         # load our sprites, keep an original as rotation is lossy!
-        self.ship_original = pygame.image.load(os.path.join(SPRITEDIR, 'player.png'))#.convert()
-        self.ship_original = pygame.transform.smoothscale(self.ship_original, (26, 38))
-        self.shipthrust_original = pygame.image.load(os.path.join(SPRITEDIR, 'player_thrust.png'))#.convert()
-        self.shipthrust_original = pygame.transform.smoothscale(self.shipthrust_original, (26, 38))
-        self.image_original = self.ship_original.copy()
-        self.image = self.image_original.copy()  # this one will be the transformed result of ...orig
-        self.image.set_colorkey((COLOURS['BLACK']))
+        self.player_sprites = {'default': pygame.image.load(os.path.join(SPRITEDIR, 'player.png')),
+                               'thrust': pygame.image.load(os.path.join(SPRITEDIR, 'player_thrust.png')),
+                               'shield': pygame.image.load(os.path.join(SPRITEDIR, 'player_shield.png')),
+                               'thrust_shield': pygame.image.load(os.path.join(SPRITEDIR, 'player_thrust_shield.png'))}
+        self.image = self.player_sprites['default'].copy()
+        self.ship_original = self.image.copy()
 
         self.rebuild()  # reset rect, radius and screen wrap padding values to new loaded image
 
@@ -191,8 +218,7 @@ class Player(SpaceObject):
         self.lives -= 1
         if self.lives > 0:
             print('Lost a life, you clumsy oaf')
-            self.state = 'awaiting respawn'
-            self.health = self.DEFAULT_HEALTH  # reset health
+            self.state = 'health zero'
         if self.lives == 0:
             print('He\'s dead, Jim')
             pygame.sprite.Sprite.kill(self)  # maybe handle this in main function
@@ -217,7 +243,12 @@ class Player(SpaceObject):
         self.rotate_step = np.clip(self.rotate_step, 0, self.MAX_ROTATION_STEP)  # clamp to min/max
 
     def thrust(self):
-        self.image_original = self.shipthrust_original.copy()
+        # set sprite state
+        if self._invulnerable:
+            self.sprite_state = 'thrust_shield'
+        else:
+            self.sprite_state = 'thrust'
+
         # rotate polar thrust vector to ship orientation to give our final thrust vector
         self.thrust_vector = self.THRUST_V.rotate(self.orientation*-1)
         self.motion_vector += self.thrust_vector
@@ -242,9 +273,18 @@ class Player(SpaceObject):
         if self.orientation < 0:
             self.orientation += 360
 
+    def before_update(self):  # set sprites according to self.sprite_state
+        self.image_original = self.player_sprites[self.sprite_state]
+
     def on_end_update(self):
         # do something afer the update
-        self.image_original = self.ship_original.copy()
+        # set sprite state
+        if self._invulnerable:
+            self.sprite_state = 'shield'
+        else:
+            self.sprite_state = 'default'
+
+
 
 
 class Asteroid(SpaceObject):
@@ -390,6 +430,7 @@ def main(): # main game code
     # some constants...
     FPS = 120               # set frames per second
     COLLISION_TICK = 16     # tick interval in milliseconds for collision detection
+    RESPAWN_DELAY = 3000    # re-spawn delay time in milliseconds
 
     clock = pygame.time.Clock()
     # create the window
@@ -401,13 +442,13 @@ def main(): # main game code
     INPUT_THRUST = 'up_arrow'
     INPUT_FIRE = 'space'
 
-
     # spawn the player
     #player_sprites = pygame.sprite.Group()
     player1 = Player(window)
     player_sprites.add(player1)
     player_update_sprites.add(player1)
     player_draw_sprites.add(player1)
+    player_awaiting_respawn = {}   # dict of players awaiting respawn, contains player object and time
 
     # spawn some asteroids!
     #asteroid_sprites = pygame.sprite.Group()
@@ -419,9 +460,6 @@ def main(): # main game code
         #print('spawning asteroid')
         ast = Asteroid(window)
         asteroid_sprites.add(ast)
-
-    # projectile trackers
-    # projectile_sprites = pygame.sprite.Group()
 
 
     while True: # main game loop
@@ -472,12 +510,35 @@ def main(): # main game code
 
 
 
-        # Check player states and manage group membership # dead, playing, awaiting respawn, teleporting
-        #for player in player_sprites:
-            # if
+        # Check player states and manage group membership # dead, playing, health zero, awaiting re-spawn, teleporting
+        for player in player_sprites:
+            if player.state == 'health zero':
+                # remove from draw and update group
+                player_draw_sprites.remove(player)
+                player_update_sprites.remove(player)
+                # add to awaiting re-spawn dict with time now to track awaiting respawn time
+                player_awaiting_respawn[player] = timenow
+                # set state to awaiting re-spawn
+                player.state = 'awaiting re-spawn'
+                # set health to default
+                player.health = player.DEFAULT_HEALTH
 
-        #
-
+        # re-spawn manager
+        keys = []
+        for player, death_time in player_awaiting_respawn.items():
+            if timenow >= death_time + RESPAWN_DELAY:
+                print('Re-spawing {0}'.format(player))
+                # reset player position, orientation and motion vector
+                player.position.xy = window.get_center()[0], window.get_center()[1]
+                player.motion_vector.xy = 0, 0
+                player.orientation = 0
+                player.make_invulnerable(countdown=3000)  # make the player invulnerable for countdown milliseconds
+                # add player back into the update and draw groups
+                player_draw_sprites.add(player)
+                player_update_sprites.add(player)
+                keys.append(player)
+        for key in keys:  # can't modify a dict length while iterating over it, so do outside of the iterator
+            del player_awaiting_respawn[key]
 
         # Update
         player_update_sprites.update()
@@ -541,7 +602,6 @@ multiplayer drops that affect the opponent - speed, instability?
 
 
 '''
-
 
 
 
