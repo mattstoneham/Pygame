@@ -24,15 +24,14 @@ projectile_sprites = pygame.sprite.Group()      # All projectiles to draw and up
 class Window(object):
 
     DISPLAYSURF = ''
-    WINDOWSIZE=(1200, 900)
-    CAPTION = 'your caption here'
 
-    def __init__(self, WINDOWSIZE=WINDOWSIZE, CAPTION=CAPTION): # class constructor
-        self.DISPLAYSURF = pygame.display.set_mode(WINDOWSIZE, 0, 32)
+    def __init__(self, WINDOW_SIZE=(1280, 1024), CAPTION='your caption here'): # class constructor
+        self.WINDOW_SIZE = WINDOW_SIZE
+        self.DISPLAYSURF = pygame.display.set_mode(WINDOW_SIZE, 0, 32)
         pygame.display.set_caption(CAPTION)
 
     def get_center(self):
-        return (int(self.WINDOWSIZE[0] / 2), int(self.WINDOWSIZE[1] / 2))
+        return (int(self.WINDOW_SIZE[0] / 2), int(self.WINDOW_SIZE[1] / 2))
 
 
 class SpaceObject(pygame.sprite.Sprite):
@@ -153,19 +152,18 @@ class SpaceObject(pygame.sprite.Sprite):
             if self.wraparound:
                 # screen position wrap around
                 if self.position.x < -self.screenpadding:
-                    self.position.x = self.window.WINDOWSIZE[0] + self.screenpadding
-                if self.position.x > self.window.WINDOWSIZE[0] + self.screenpadding:
+                    self.position.x = self.window.WINDOW_SIZE[0] + self.screenpadding
+                if self.position.x > self.window.WINDOW_SIZE[0] + self.screenpadding:
                     self.position.x = -self.screenpadding
                 if self.position.y < -self.screenpadding:
-                    self.position.y = self.window.WINDOWSIZE[1] + self.screenpadding
-                if self.position.y > self.window.WINDOWSIZE[1] + self.screenpadding:
+                    self.position.y = self.window.WINDOW_SIZE[1] + self.screenpadding
+                if self.position.y > self.window.WINDOW_SIZE[1] + self.screenpadding:
                     self.position.y = -self.screenpadding
 
             self.position += self.motion_vector
             self.rect.center = self.position
         else:
             # unless heath has dropped to zero or below
-            print('{0} health reached zero'.format(self))
             self.on_health_zero()
 
         self.on_end_update()    # optionally, do something after the update
@@ -296,10 +294,10 @@ class Asteroid(SpaceObject):
     SPAWN_SCREEN_PAD = -100
 
     # resource definitions
-    asteroid_sprites_a = {1: 'asteroid_01_a.png', 2: 'asteroid_01_a.png', 3: 'asteroid_01_a.png'}
-    asteroid_sprites_b = {1: 'asteroid_01_a.png', 2: 'asteroid_01_a.png', 3: 'asteroid_01_a.png'}
-    asteroid_sprites_c = {1: 'asteroid_01_a.png', 2: 'asteroid_01_a.png', 3: 'asteroid_01_a.png'}
-    asteroid_sprites_d = {1: 'asteroid_01_a.png', 2: 'asteroid_01_a.png', 3: 'asteroid_01_a.png'}
+    asteroid_sprites_a = {'images':{1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
+    asteroid_sprites_b = {'images':{1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
+    asteroid_sprites_c = {'images':{1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
+    asteroid_sprites_d = {'images':{1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
 
     def __init__(self, window, stage=1, spawn_position=False):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
@@ -308,17 +306,18 @@ class Asteroid(SpaceObject):
 
         self.stage = stage
         self.health = 100
-        self.min_velocity = 0.05     # default values for 100 x 100 sprite
-        self.max_velocity = 0.4    # default values for 100 x 100 sprite
-        self.rotation_speed = 1     # default values for 100 x 100 sprite
-
+        self.min_velocity = 0.05            # default values for 120 x 120 sprite
+        self.max_velocity = 0.4             # default values for 120 x 120 sprite
+        self.min_rotation_speed = 0.1       # default values for 120 x 120 sprite
+        self.max_rotation_speed = 0.3       # default values for 120 x 120 sprite
 
 
         # pick random sprite set
         self.asteroid_sprites = {}
         self.asteroid_sprites = np.random.choice([self.asteroid_sprites_a, self.asteroid_sprites_b,
                                                   self.asteroid_sprites_c, self.asteroid_sprites_d], 1)[0]
-        self.image_original = pygame.image.load(os.path.join(SPRITEDIR, self.asteroid_sprites[self.stage]))
+
+        self.image_original = pygame.image.load(os.path.join(SPRITEDIR, self.asteroid_sprites['images'][self.stage]))
 
         # this is temporary, need some art at this resolution
         if stage == 1:
@@ -327,10 +326,14 @@ class Asteroid(SpaceObject):
             self.image_original = pygame.transform.smoothscale(self.image_original, (70, 70))
             self.min_velocity *= 2
             self.max_velocity *= 2
+            self.min_rotation_speed *= 2
+            self.max_rotation_speed *= 2
         if stage == 3:
             self.image_original = pygame.transform.smoothscale(self.image_original, (35, 35))
             self.min_velocity *= 4
             self.max_velocity *= 4
+            self.min_rotation_speed *= 4
+            self.max_rotation_speed *= 4
 
         self.image = self.image_original.copy()
         self.image.set_colorkey((COLOURS['BLACK']))
@@ -341,44 +344,46 @@ class Asteroid(SpaceObject):
 
         # build polar vector of x = 0, y = rand min->max
         self.motion_vector = pygame.Vector2(0, random.uniform(self.min_velocity, self.max_velocity))
+        # set rotation speed, pick between rand min/max and direction
+        self.rotation_speed = random.uniform(self.min_rotation_speed, self.max_rotation_speed) * np.random.choice([1, -1])
 
         if spawn_position:
-            #print('spawning asteroid at position {0}'.format(spawn_position))
             # spawn at given position
             self.position = pygame.Vector2(spawn_position[0], spawn_position[1])
             self.motion_vector = self.motion_vector.rotate(random.randint(0, 360))
         else:
-            #print('Spawning asteroid randomly off screen')
             # pick random side to spawn - top, left, right, bottom
             spawnside = np.random.choice(['top', 'bottom', 'left', 'right'], 1)[0]
             # pick random (range constrained) position and vector rotate to start
             if spawnside == 'top':
-                self.position = pygame.Vector2(random.randint(0, window.WINDOWSIZE[0]), self.SPAWN_SCREEN_PAD)
+                self.position = pygame.Vector2(random.randint(0, window.WINDOW_SIZE[0]), self.SPAWN_SCREEN_PAD)
                 self.motion_vector = self.motion_vector.rotate((random.randint(-80, 80)) - 1)
             if spawnside == 'left':
-                self.position = pygame.Vector2(self.SPAWN_SCREEN_PAD, random.randint(0, window.WINDOWSIZE[1]))
+                self.position = pygame.Vector2(self.SPAWN_SCREEN_PAD, random.randint(0, window.WINDOW_SIZE[1]))
                 self.motion_vector = self.motion_vector.rotate((random.randint(10, 170)) * -1)
             if spawnside == 'right':
-                self.position = pygame.Vector2(window.WINDOWSIZE[0] - self.SPAWN_SCREEN_PAD,
-                                               random.randint(0, window.WINDOWSIZE[1]))
+                self.position = pygame.Vector2(window.WINDOW_SIZE[0] - self.SPAWN_SCREEN_PAD,
+                                               random.randint(0, window.WINDOW_SIZE[1]))
                 self.motion_vector = self.motion_vector.rotate((random.randint(190, 350)) * -1)
             if spawnside == 'bottom':
-                self.position = pygame.Vector2(random.randint(0, window.WINDOWSIZE[0]),
-                                               window.WINDOWSIZE[1] - self.SPAWN_SCREEN_PAD)
+                self.position = pygame.Vector2(random.randint(0, window.WINDOW_SIZE[0]),
+                                               window.WINDOW_SIZE[1] - self.SPAWN_SCREEN_PAD)
                 self.motion_vector = self.motion_vector.rotate((random.randint(100, 260)) - 1)
 
         self.rect.center = self.position
 
+    def update_orientation(self):
+        self.orientation += self.rotation_speed
+
     def set_wraparound(self):  # overrides inherited method to allow spawning off screen, with wraparound set to true once visible
-        if self.position.x > 0 and self.position.x < self.window.WINDOWSIZE[0]:
-            if self.position.y > 0 and self.position.y < self.window.WINDOWSIZE[1]:
+        if self.position.x > 0 and self.position.x < self.window.WINDOW_SIZE[0]:
+            if self.position.y > 0 and self.position.y < self.window.WINDOW_SIZE[1]:
                 self.wraparound = True
         return self.wraparound
     
     def on_health_zero(self):
         if not self.stage == 3:
             for i in range(4):
-                #print('Spawning new asteroids')
                 ast = Asteroid(self.window, stage=self.stage+1, spawn_position=self.rect.center)
                 asteroid_sprites.add(ast)
         pygame.sprite.Sprite.kill(self)
@@ -404,12 +409,9 @@ class Projectile(SpaceObject):
         self.health = 1
         self.damage = 100
         self.lifespan = 1500  # milliseconds
-        # print('spawned projectile at {0} with vector {1}'.format(self.position, self.motion_vector))
         self.window = window
 
         self.rebuild()
-        #self.rect = self.image.get_rect()
-        #self.screenpadding = (self.image_original.get_rect().size[1] / 2)  # set wrap screen padding to half sprite size
 
     def set_wraparound(self):
         return True
@@ -431,40 +433,48 @@ def main(): # main game code
     FPS = 120               # set frames per second
     COLLISION_TICK = 16     # tick interval in milliseconds for collision detection
     RESPAWN_DELAY = 3000    # re-spawn delay time in milliseconds
-
     clock = pygame.time.Clock()
-    # create the window
-    window = Window(CAPTION='player movement test')  # instance a window for the game
 
-    # keyboard mappings
+    # create the window
+    window = Window(WINDOW_SIZE=(1600, 1024), CAPTION='player movement test')  # instance a window for the game
+
+    # player1 keyboard mappings
     INPUT_ROTATE_CCW = 'left_arrow'
     INPUT_ROTATE_CW = 'right_arrow'
     INPUT_THRUST = 'up_arrow'
     INPUT_FIRE = 'space'
 
     # spawn the player
-    #player_sprites = pygame.sprite.Group()
     player1 = Player(window)
     player_sprites.add(player1)
     player_update_sprites.add(player1)
     player_draw_sprites.add(player1)
-    player_awaiting_respawn = {}   # dict of players awaiting respawn, contains player object and time
+    player_awaiting_respawn = {}   # dict of players awaiting re-spawn, contains player object and time
 
     # spawn some asteroids!
-    #asteroid_sprites = pygame.sprite.Group()
     asteroid_spawn_interval = 10000  # in milliseconds
     num_initial_asteroids = 4
 
     asteroid_list = []
     for i in range(num_initial_asteroids):
-        #print('spawning asteroid')
         ast = Asteroid(window)
         asteroid_sprites.add(ast)
-
+    last_asteroid_spawntime = 0
+    print('asteroid spawned, next one in {0} milliseconds'.format(asteroid_spawn_interval))
 
     while True: # main game loop
         clock.tick(FPS)
         timenow = pygame.time.get_ticks()
+
+
+        # asteroid spawn manager
+        if timenow > last_asteroid_spawntime + asteroid_spawn_interval:
+            # spawn another asteroid
+            asteroid_sprites.add(Asteroid(window))
+            asteroid_spawn_interval -= 100
+            print('asteroid spawned, next one in {0} milliseconds'.format(asteroid_spawn_interval))
+            last_asteroid_spawntime = timenow
+
 
         # Event handling
         for event in pygame.event.get():
@@ -472,22 +482,23 @@ def main(): # main game code
                 pygame.quit()
                 sys.exit()
 
-        # input handling
-        keystate = pygame.key.get_pressed()
-        if keystate[pygame.K_a]:
-            player1.rotate(direction='ccw')
-        if keystate[pygame.K_d]:
-            player1.rotate(direction='cw')
-        if keystate[pygame.K_w]:
-            player1.thrust()
-        if keystate[pygame.K_SPACE]:
-            if (timenow - player1.last_fire) > player1.firing_interval:
-                # instance the projectile class here
 
-                projectile = Projectile(window=window, position=player1.position, ship_vector=player1.motion_vector,
-                                        ship_orientation=player1.orientation, speed=player1.projectile_speed, spawntime=timenow)
-                projectile_sprites.add(projectile)
-                player1.last_fire = timenow
+        keystate = pygame.key.get_pressed()
+        # player1 input handling
+        if player1.state == 'playing':
+            if keystate[pygame.K_a]:
+                player1.rotate(direction='ccw')
+            if keystate[pygame.K_d]:
+                player1.rotate(direction='cw')
+            if keystate[pygame.K_w]:
+                player1.thrust()
+            if keystate[pygame.K_SPACE]:
+                if (timenow - player1.last_fire) > player1.firing_interval:
+                    # instance the projectile class here
+                    projectile = Projectile(window=window, position=player1.position, ship_vector=player1.motion_vector,
+                                            ship_orientation=player1.orientation, speed=player1.projectile_speed, spawntime=timenow)
+                    projectile_sprites.add(projectile)
+                    player1.last_fire = timenow
 
         # check for end-of-life projectiles and kill
         for projectile in projectile_sprites:
@@ -495,19 +506,15 @@ def main(): # main game code
                 pygame.sprite.Sprite.kill(projectile)
 
 
-
-
         # Collision checks
         for projectile in projectile_sprites:#
             if (timenow - projectile.last_collision_check) > COLLISION_TICK:
                 projectile.collision_check(asteroid_sprites)
                 projectile.last_collision_check = timenow
-
         for player in player_draw_sprites:
             if (timenow - player.last_collision_check) > COLLISION_TICK:
                 player.collision_check(asteroid_sprites)
                 player.last_collision_check = timenow
-
 
 
         # Check player states and manage group membership # dead, playing, health zero, awaiting re-spawn, teleporting
@@ -523,6 +530,7 @@ def main(): # main game code
                 # set health to default
                 player.health = player.DEFAULT_HEALTH
 
+
         # re-spawn manager
         keys = []
         for player, death_time in player_awaiting_respawn.items():
@@ -536,6 +544,7 @@ def main(): # main game code
                 # add player back into the update and draw groups
                 player_draw_sprites.add(player)
                 player_update_sprites.add(player)
+                player.state = 'playing'
                 keys.append(player)
         for key in keys:  # can't modify a dict length while iterating over it, so do outside of the iterator
             del player_awaiting_respawn[key]
@@ -565,29 +574,9 @@ if __name__ == '__main__':
 '''
 
 
-if player health zero, but lives left
-    spawn an explosion at player position
-    remove player from draw group (also stops collision)
-    remove player from update group
-    store time
-    place player in awaiting respawn state
-
-
-the each tick
-    for each player awaiting respawn
-        check player respawn delay against current time
-        if time threshold reached
-        call player respawn method
-        set player invunerable for 3 seconds (should probably prevent firing)
-
-
-
-
 
 To Do:
 
-link projectile speed to player property
-player collision
 more asteroid spawning
 score, lives display
 teleporting
