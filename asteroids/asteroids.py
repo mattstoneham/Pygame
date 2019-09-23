@@ -51,8 +51,8 @@ class SpaceObject(pygame.sprite.Sprite):
         self.damage = 100                           # damage this object does to another on collision
         self.health = 100                           # this object health
         self.lives = 1                              # this object number of lives
-        self._invulnerable = False                 # is the object invulnerable? - private, not to be directly modified
-        self._invulnerability_end = 0              # time when invulnerability ends
+        self._invulnerable = False                  # is the object invulnerable? - private, not to be directly modified
+        self._invulnerability_end = 0               # time when invulnerability ends
         self.do_collision_check = False             # enable/disable collision checks for this sprite
         self.last_collision_check = 0               # time in milliseconds of last collision check
 
@@ -283,8 +283,6 @@ class Player(SpaceObject):
             self.sprite_state = 'default'
 
 
-
-
 class Asteroid(SpaceObject):
 
     # static properties
@@ -294,10 +292,10 @@ class Asteroid(SpaceObject):
     SPAWN_SCREEN_PAD = -100
 
     # resource definitions
-    asteroid_sprites_a = {'images':{1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
-    asteroid_sprites_b = {'images':{1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
-    asteroid_sprites_c = {'images':{1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
-    asteroid_sprites_d = {'images':{1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
+    asteroid_sprites_a = {'images': {1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
+    asteroid_sprites_b = {'images': {1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
+    asteroid_sprites_c = {'images': {1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
+    asteroid_sprites_d = {'images': {1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
 
     def __init__(self, window, stage=1, spawn_position=False):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
@@ -417,12 +415,22 @@ class Projectile(SpaceObject):
         return True
 
 
-class Explosion(SpaceObject):
+class AnimatingObject(SpaceObject):
 
-    # resources
-
-    def __init__(self, window):  # class constructor
+    def __init__(self, window, subfolder='explosion_001', fps=24, loop=False):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
+
+        # construct the sprite path - should be subfolder which contains only anim frames for this sprite
+        sprite_dir = os.path.realpath(os.path.join(SPRITEDIR, subfolder))
+        # return all images in this dir (sequence)
+        found_images = [f for f in os.listdir(sprite_dir) if os.path.isfile(os.path.join(sprite_dir, f))]
+        self.images = []
+        # build list of loaded images
+        for found_image in found_images:
+            self.images.append(pygame.image.load(os.path.realpath(os.path.join(sprite_dir, found_image))))
+        # ...could sanity check here to make sure they are all the same size
+        #print(self.images)
+
 
 
 
@@ -444,6 +452,9 @@ def main(): # main game code
     INPUT_THRUST = 'up_arrow'
     INPUT_FIRE = 'space'
 
+    # test instance explosion
+    explosion = AnimatingObject(window=window)
+
     # spawn the player
     player1 = Player(window)
     player_sprites.add(player1)
@@ -462,7 +473,7 @@ def main(): # main game code
     last_asteroid_spawntime = 0
     print('asteroid spawned, next one in {0} milliseconds'.format(asteroid_spawn_interval))
 
-    while True: # main game loop
+    while True:  # main game loop
         clock.tick(FPS)
         timenow = pygame.time.get_ticks()
 
@@ -471,7 +482,8 @@ def main(): # main game code
         if timenow > last_asteroid_spawntime + asteroid_spawn_interval:
             # spawn another asteroid
             asteroid_sprites.add(Asteroid(window))
-            asteroid_spawn_interval -= 100
+            if asteroid_spawn_interval > 4000:
+                asteroid_spawn_interval -= 100
             print('asteroid spawned, next one in {0} milliseconds'.format(asteroid_spawn_interval))
             last_asteroid_spawntime = timenow
 
@@ -577,7 +589,7 @@ if __name__ == '__main__':
 
 To Do:
 
-more asteroid spawning
+
 score, lives display
 teleporting
 add starting health to asteroid dict, plus hit but not die effect (flash)
