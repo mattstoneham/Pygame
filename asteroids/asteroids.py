@@ -16,9 +16,10 @@ player_sprites = pygame.sprite.Group()          # All player sprites
 player_draw_sprites = pygame.sprite.Group()     # Player sprites to draw
 player_update_sprites = pygame.sprite.Group()   # Player sprites to update
 
+
 asteroid_sprites = pygame.sprite.Group()        # All asteroids to draw and update
 projectile_sprites = pygame.sprite.Group()      # All projectiles to draw and update
-
+explosion_sprites = pygame.sprite.Group()
 
 
 class Window(object):
@@ -219,7 +220,6 @@ class Player(SpaceObject):
             self.state = 'health zero'
         if self.lives == 0:
             print('He\'s dead, Jim')
-            pygame.sprite.Sprite.kill(self)  # maybe handle this in main function
             self.state = 'dead'
 
     def set_wraparound(self):
@@ -308,7 +308,7 @@ class Asteroid(SpaceObject):
         self.max_velocity = 0.4             # default values for 120 x 120 sprite
         self.min_rotation_speed = 0.1       # default values for 120 x 120 sprite
         self.max_rotation_speed = 0.3       # default values for 120 x 120 sprite
-
+        self.number_fragments = 3           # number of fragments to split into
 
         # pick random sprite set
         self.asteroid_sprites = {}
@@ -381,7 +381,7 @@ class Asteroid(SpaceObject):
     
     def on_health_zero(self):
         if not self.stage == 3:
-            for i in range(4):
+            for i in range(self.number_fragments):
                 ast = Asteroid(self.window, stage=self.stage+1, spawn_position=self.rect.center)
                 asteroid_sprites.add(ast)
         pygame.sprite.Sprite.kill(self)
@@ -417,19 +417,44 @@ class Projectile(SpaceObject):
 
 class AnimatingObject(SpaceObject):
 
-    def __init__(self, window, subfolder='explosion_001', fps=24, loop=False):  # class constructor
+    def __init__(self, window, subfolder='explosion_001', fps=12, loop=False, max_loops=-1, position=(0, 0)):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
 
+        self.position.xy = position[0], position[1]
         # construct the sprite path - should be subfolder which contains only anim frames for this sprite
         sprite_dir = os.path.realpath(os.path.join(SPRITEDIR, subfolder))
         # return all images in this dir (sequence)
-        found_images = [f for f in os.listdir(sprite_dir) if os.path.isfile(os.path.join(sprite_dir, f))]
-        self.images = []
-        # build list of loaded images
-        for found_image in found_images:
-            self.images.append(pygame.image.load(os.path.realpath(os.path.join(sprite_dir, found_image))))
-        # ...could sanity check here to make sure they are all the same size
-        #print(self.images)
+        image_sequence = [f for f in os.listdir(sprite_dir) if os.path.isfile(os.path.join(sprite_dir, f))]
+        self.images = []                    # list of pygame image objects
+        self.image_index = 1                # tracks which image in list to use
+        for image in image_sequence:
+            print(image)
+            self.images.append(pygame.image.load(os.path.realpath(os.path.join(sprite_dir, image))))
+        self.image_original = self.images[0]         # set initial sprite image to first in sequence
+        self.rebuild()                      # rebuild the image rect
+        self.tick_increment = 1000 / fps    # set time increment on which to change to next image in sequence
+        self.next_image_tick = pygame.time.get_ticks() + self.tick_increment  # set the tick time to set next image in seq
+        self.loop = loop                    # should we loop
+        self.max_loops = max_loops          # max loops, -1 if infinite
+        self.loop_counter = 0               # loop count tracker
+
+
+    def before_update(self):
+        this_time = pygame.time.get_ticks()
+        if this_time > self.next_image_tick:  # check if time to change image
+            self.image_original = self.images[self.image_index]      # ...if so, change the image
+            self.image_index += 1                           # increment the image index
+            if self.image_index < len(self.images):         # if image index is out of range, either loop or exit
+                if self.loop:
+                    self.image_index = 0                    # ...looping, reset index
+                    self.loop_counter += 1                  # increment the loop counter
+                    if not self.max_loops == -1:            # check not over max loops
+                        if self.loop_counter >= self.max_loops:     # ...if so...
+                            self.loop = False                       # set loop to false
+            else:
+                self.on_health_zero()
+            self.next_image_tick = this_time + self.tick_increment
+
 
 
 
@@ -452,8 +477,7 @@ def main(): # main game code
     INPUT_THRUST = 'up_arrow'
     INPUT_FIRE = 'space'
 
-    # test instance explosion
-    explosion = AnimatingObject(window=window)
+
 
     # spawn the player
     player1 = Player(window)
@@ -531,7 +555,15 @@ def main(): # main game code
 
         # Check player states and manage group membership # dead, playing, health zero, awaiting re-spawn, teleporting
         for player in player_sprites:
+            if player.state == 'dead':
+                #spawn an explosion at player position
+                explosion = AnimatingObject(window=window, position=player.position)
+                explosion_sprites.add(explosion)
+                pygame.sprite.Sprite.kill(player)
             if player.state == 'health zero':
+                #spawn an explosion at player position
+                explosion = AnimatingObject(window=window, position=player.position)
+                explosion_sprites.add(explosion)
                 # remove from draw and update group
                 player_draw_sprites.remove(player)
                 player_update_sprites.remove(player)
@@ -565,12 +597,14 @@ def main(): # main game code
         player_update_sprites.update()
         asteroid_sprites.update()
         projectile_sprites.update()
+        explosion_sprites.update()
 
         # Draw
         window.DISPLAYSURF.fill((35, 35, 55))
         projectile_sprites.draw(window.DISPLAYSURF)
         asteroid_sprites.draw(window.DISPLAYSURF)
         player_draw_sprites.draw(window.DISPLAYSURF)
+        explosion_sprites.draw(window.DISPLAYSURF)
 
 
         # update display
@@ -596,7 +630,7 @@ add starting health to asteroid dict, plus hit but not die effect (flash)
 ...for massive asteroids, add extra stages
 powerup drops from asteroids - lives, damage, fire rate, teleports
 add probability spread to asteroid types
-add explosions
+
 add flying saucer that shoots at you
 multiplayer
 multiplayer drops that affect the opponent - speed, instability?
