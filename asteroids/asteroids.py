@@ -7,19 +7,23 @@ import random
 
 
 # global variables
-GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]
-SPRITEDIR = os.path.join(GAMEDIR, 'sprites')
-GameState = 'menu screen'
-COLOURS = {'BLACK': (0, 0, 0), 'GREEN': (0, 255, 0), 'L_BLUE': (130, 220, 255)}
+GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]      # base script path, for relative resource gathering
+SPRITEDIR = os.path.join(GAMEDIR, 'sprites')                                    # sprite directory, relative to base path
+GameState = 'menu screen'                                                       # the main game state
+COLOURS = {'BLACK': (0, 0, 0), 'GREEN': (0, 255, 0), 'L_BLUE': (130, 220, 255), # some default colours
+           'RED': (255, 0, 0)}
 
 player_sprites = pygame.sprite.Group()          # All player sprites
 player_draw_sprites = pygame.sprite.Group()     # Player sprites to draw
 player_update_sprites = pygame.sprite.Group()   # Player sprites to update
 
-
 asteroid_sprites = pygame.sprite.Group()        # All asteroids to draw and update
 projectile_sprites = pygame.sprite.Group()      # All projectiles to draw and update
-explosion_sprites = pygame.sprite.Group()
+explosion_sprites = pygame.sprite.Group()       # All explosion sprites to draw and update
+
+UI_sprites = pygame.sprite.Group()              # All UI sprites
+UI_draw_sprites = pygame.sprite.Group()         # All UI sprites to draw
+UI_update_sprites = pygame.sprite.Group()       # All UI sprites to update
 
 
 class Window(object):
@@ -39,12 +43,12 @@ class SpaceObject(pygame.sprite.Sprite):
 
     global GameState, SPRITEDIR, COLOURS
 
-    def __init__(self, window, spritesize = (20, 20)):
+    def __init__(self, window, spritesize = (20, 20), position_by='center'):
         pygame.sprite.Sprite.__init__(self)         # init the parent class
         #print('SpaceObject init')
 
         self.window = window                        # main window for querying stuff like screen size
-
+        self.position_by = position_by              # set position by what part of the bbox, default is center
         self.position = pygame.Vector2(0, 0)        # screen space position of the sprite
         self.orientation = 0                        # orientation of the sprite in degrees
         self.motion_vector = pygame.Vector2(0, 0)   # the motion vector of the sprite
@@ -57,9 +61,9 @@ class SpaceObject(pygame.sprite.Sprite):
         self.do_collision_check = False             # enable/disable collision checks for this sprite
         self.last_collision_check = 0               # time in milliseconds of last collision check
 
-        self.image_original = pygame.Surface(spritesize)
-        self.image_original.fill((COLOURS['L_BLUE']))
-        self.image = self.image_original.copy()
+        self.image_original = pygame.Surface(spritesize)    # always clean version of the sprite image, updated from here on self.update
+        self.image_original.fill((COLOURS['L_BLUE']))       # default square fill in place of an image
+        self.image = self.image_original.copy()             # actual image drawn
 
         self.rebuild() # reset rect, radius and screen wrap padding values to new loaded image
 
@@ -162,12 +166,30 @@ class SpaceObject(pygame.sprite.Sprite):
                     self.position.y = -self.screenpadding
 
             self.position += self.motion_vector
-            self.rect.center = self.position
+            if self.position_by == 'center':
+                self.rect.center = self.position
+            if self.position_by == 'midleft':
+                self.rect.midleft = self.position
+            if self.position_by == 'midright':
+                self.rect.midright = self.position
+            if self.position_by == 'midtop':
+                self.rect.midtop = self.position
+            if self.position_by == 'midbottom':
+                self.rect.midbottom = self.position
+            if self.position_by == 'topleft':
+                self.rect.topleft = self.position
+            if self.position_by == 'topright':
+                self.rect.topright = self.position
+            if self.position_by == 'bottomleft':
+                self.rect.bottomleft = self.position
+            if self.position_by == 'bottomright':
+                self.rect.bottomright = self.position
         else:
             # unless heath has dropped to zero or below
             self.on_health_zero()
 
         self.on_end_update()    # optionally, do something after the update
+
 
 class Player(SpaceObject):
 
@@ -428,7 +450,6 @@ class AnimatingObject(SpaceObject):
         self.images = []                    # list of pygame image objects
         self.image_index = 1                # tracks which image in list to use
         for image in image_sequence:
-            print(image)
             self.images.append(pygame.image.load(os.path.realpath(os.path.join(sprite_dir, image))))
         self.image_original = self.images[0]         # set initial sprite image to first in sequence
         self.rebuild()                      # rebuild the image rect
@@ -456,6 +477,15 @@ class AnimatingObject(SpaceObject):
             self.next_image_tick = this_time + self.tick_increment
 
 
+class TextObject(SpaceObject):
+
+    def __init__(self, window, font='freesansbold.ttf', size=32, colour=COLOURS['GREEN'], text='Hello World!', position_by='center', position=(0, 0)):
+        SpaceObject.__init__(self, window, position_by=position_by)
+        self.position.xy = position[0], position[1]
+        fontObj = pygame.font.Font(font, size)  # create a font object
+        self.image_original = fontObj.render(text, True, colour, COLOURS['BLACK']) # create surface obj with text drawn on it
+        self.image.set_colorkey((COLOURS['BLACK']))
+        self.rebuild()
 
 
 
@@ -463,10 +493,11 @@ def main(): # main game code
 
     pygame.init()
     # some constants...
-    FPS = 120               # set frames per second
-    COLLISION_TICK = 16     # tick interval in milliseconds for collision detection
-    RESPAWN_DELAY = 3000    # re-spawn delay time in milliseconds
-    clock = pygame.time.Clock()
+    FPS = 120                   # set frames per second
+    COLLISION_TICK = 16         # tick interval in milliseconds for collision detection
+    RESPAWN_DELAY = 3000        # re-spawn delay time in milliseconds
+    clock = pygame.time.Clock() # clock to allow millisecond-based (i.e frame-rate independent) timing
+    multiplayer = False         # single or multi-layer
 
     # create the window
     window = Window(WINDOW_SIZE=(1600, 1024), CAPTION='player movement test')  # instance a window for the game
@@ -477,7 +508,14 @@ def main(): # main game code
     INPUT_THRUST = 'up_arrow'
     INPUT_FIRE = 'space'
 
-
+    # spawn the in game UI
+    UI_objects = []
+    UI_objects.append(TextObject(window=window, colour=COLOURS['RED'], text='Player 1', position_by='topleft', position=(20, 20)))
+    UI_objects.append(TextObject(window=window, colour=COLOURS['RED'], text='Lives:', position_by='topleft', position=(20, 55)))
+    UI_objects.append(TextObject(window=window, colour=COLOURS['RED'], text='Score:', position_by='topleft', position=(20, 90)))
+    for UI_object in UI_objects:
+        UI_draw_sprites.add(UI_object)
+        UI_update_sprites.add(UI_object)
 
     # spawn the player
     player1 = Player(window)
@@ -598,6 +636,7 @@ def main(): # main game code
         asteroid_sprites.update()
         projectile_sprites.update()
         explosion_sprites.update()
+        UI_update_sprites.update()
 
         # Draw
         window.DISPLAYSURF.fill((35, 35, 55))
@@ -605,6 +644,7 @@ def main(): # main game code
         asteroid_sprites.draw(window.DISPLAYSURF)
         player_draw_sprites.draw(window.DISPLAYSURF)
         explosion_sprites.draw(window.DISPLAYSURF)
+        UI_draw_sprites.draw(window.DISPLAYSURF)
 
 
         # update display
@@ -625,6 +665,7 @@ To Do:
 
 
 score, lives display
+fire rate decay
 teleporting
 add starting health to asteroid dict, plus hit but not die effect (flash)
 ...for massive asteroids, add extra stages
