@@ -20,7 +20,7 @@ player_sprites = pygame.sprite.Group()          # All player sprites
 player_draw_sprites = pygame.sprite.Group()     # Player sprites to draw
 player_update_sprites = pygame.sprite.Group()   # Player sprites to update
 
-asteroid_sprites = pygame.sprite.Group()        # All asteroids to draw and update
+asteroid_dict = pygame.sprite.Group()        # All asteroids to draw and update
 projectile_sprites = pygame.sprite.Group()      # All projectiles to draw and update
 explosion_sprites = pygame.sprite.Group()       # All explosion sprites to draw and update
 
@@ -326,54 +326,51 @@ class Asteroid(SpaceObject):
     SPAWN_SCREEN_PAD = -100
 
     # resource definitions
-    asteroid_sprites_a = {'images': {1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
-    asteroid_sprites_b = {'images': {1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
-    asteroid_sprites_c = {'images': {1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
-    asteroid_sprites_d = {'images': {1: 'asteroid_01_a.png', 2: 'asteroid_01_b.png', 3: 'asteroid_01_c.png'}}
+    asteroid_a = {1:{'image': 'asteroid_01_a.png', 'v_scale': 1, 'score': 1, 'health': 100, 'fragments': 3, 'gravity': 0},
+                  2:{'image': 'asteroid_01_b.png', 'v_scale': 2, 'score': 1, 'health': 100, 'fragments': 3, 'gravity': 0},
+                  3:{'image': 'asteroid_01_c.png', 'v_scale': 4, 'score': 1, 'health': 100, 'fragments': 0, 'gravity': 0}}
 
-    def __init__(self, window, stage=1, spawn_position=False):  # class constructor
+    asteroid_b = {1:{'image': 'asteroid_01_a.png', 'v_scale': 1, 'score': 1, 'health': 100, 'fragments': 3, 'gravity': 0},
+                  2:{'image': 'asteroid_01_b.png', 'v_scale': 2, 'score': 1, 'health': 100, 'fragments': 3, 'gravity': 0},
+                  3:{'image': 'asteroid_01_c.png', 'v_scale': 4, 'score': 1, 'health': 100, 'fragments': 0, 'gravity': 0}}
+
+    asteroid_c = {1:{'image': 'asteroid_03_a.png', 'v_scale': 1, 'score': 1, 'health': 100, 'fragments': 3, 'gravity': 0},
+                  2:{'image': 'asteroid_03_b.png', 'v_scale': 2, 'score': 1, 'health': 100, 'fragments': 3, 'gravity': 0},
+                  3:{'image': 'asteroid_03_c.png', 'v_scale': 4, 'score': 1, 'health': 100, 'fragments': 0, 'gravity': 0}}
+
+    asteroid_d = {1:{'image': 'asteroid_04_a.png', 'v_scale': 1, 'score': 10, 'health': 100, 'fragments': 3, 'gravity': 0},
+                  2:{'image': 'asteroid_04_b.png', 'v_scale': 2, 'score': 10, 'health': 100, 'fragments': 3, 'gravity': 0},
+                  3:{'image': 'asteroid_04_c.png', 'v_scale': 4, 'score': 10, 'health': 100, 'fragments': 0, 'gravity': 0}}
+
+    def __init__(self, window, stage=1, spawn_position=False, asteroid_dict={}):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
 
         self.window = window
 
         self.stage = stage
-        self.health = 100
-        self.min_velocity = 0.05            # default values for 120 x 120 sprite
-        self.max_velocity = 0.4             # default values for 120 x 120 sprite
-        self.min_rotation_speed = 0.1       # default values for 120 x 120 sprite
-        self.max_rotation_speed = 0.3       # default values for 120 x 120 sprite
-        self.number_fragments = 3           # number of fragments to split into
-        self.scoring_value = 1              # scoring value on destroyed
-        # pick random sprite set
-        self.asteroid_sprites = {}
-        self.asteroid_sprites = np.random.choice([self.asteroid_sprites_a, self.asteroid_sprites_b,
-                                                  self.asteroid_sprites_c, self.asteroid_sprites_d], 1)[0]
+        # pick random asteroid
+        self.asteroid_dict = asteroid_dict
+        if not len(self.asteroid_dict):
+            self.asteroid_dict = np.random.choice([self.asteroid_a, self.asteroid_b, self.asteroid_c, self.asteroid_d], 1)[0]
 
-        self.image_original = pygame.image.load(os.path.join(g_SPRITEDIR, self.asteroid_sprites['images'][self.stage]))
+        v_scale = self.asteroid_dict[self.stage]['v_scale']
+        self.health = self.asteroid_dict[self.stage]['health']              # number of fragments to split into
+        self.min_velocity = 0.05 * v_scale                                  # default values for 120 x 120 sprite
+        self.max_velocity = 0.4 * v_scale                                   # default values for 120 x 120 sprite
+        self.min_rotation_speed = 0.1 * v_scale                             # default values for 120 x 120 sprite
+        self.max_rotation_speed = 0.3 * v_scale                             # default values for 120 x 120 sprite
+        self.number_fragments = self.asteroid_dict[self.stage]['fragments'] # number of fragments to split into
+        self.scoring_value = self.asteroid_dict[self.stage]['score']        # scoring value on destroyed
 
-        # this is temporary, need some art at this resolution
-        if stage == 1:
-            self.image_original = pygame.transform.smoothscale(self.image_original, (120, 120))
-        if stage == 2:
-            self.image_original = pygame.transform.smoothscale(self.image_original, (70, 70))
-            self.min_velocity *= 2
-            self.max_velocity *= 2
-            self.min_rotation_speed *= 2
-            self.max_rotation_speed *= 2
-        if stage == 3:
-            self.image_original = pygame.transform.smoothscale(self.image_original, (35, 35))
-            self.min_velocity *= 4
-            self.max_velocity *= 4
-            self.min_rotation_speed *= 4
-            self.max_rotation_speed *= 4
+
+        self.image_original = pygame.image.load(os.path.join(g_SPRITEDIR, self.asteroid_dict[self.stage]['image']))
 
         self.image = self.image_original.copy()
-        self.image.set_colorkey((g_COLOURS['BLACK']))
 
         self.rebuild()  # reset rect, radius and screen wrap padding values to new loaded image
 
-        # SPAWNING
 
+        # SPAWNING
         # build polar vector of x = 0, y = rand min->max
         self.motion_vector = pygame.Vector2(0, random.uniform(self.min_velocity, self.max_velocity))
         # set rotation speed, pick between rand min/max and direction
@@ -416,13 +413,13 @@ class Asteroid(SpaceObject):
     def on_health_zero(self):
         #print('{0} on heath zero with last collision owner: {1}'.format(self, self.last_collision_owner))
         if self.last_collision_owner:  # if the last collision has an owner, e.g asteroid hit by projectile, increment scores
-            g_game_stats[self.last_collision_owner]['score'] = g_game_stats[self.last_collision_owner]['score'] + 1
+            g_game_stats[self.last_collision_owner]['score'] = g_game_stats[self.last_collision_owner]['score'] + self.scoring_value
             #print(g_game_stats)
             #  tidy up the above, maybe have a game stat manager class with a simpler interface
         if not self.stage == 3:
             for i in range(self.number_fragments):
-                ast = Asteroid(self.window, stage=self.stage+1, spawn_position=self.rect.center)
-                asteroid_sprites.add(ast)
+                ast = Asteroid(self.window, stage=self.stage+1, spawn_position=self.rect.center, asteroid_dict=self.asteroid_dict)
+                asteroid_dict.add(ast)
         pygame.sprite.Sprite.kill(self)
 
 
@@ -570,11 +567,12 @@ def main(): # main game code
 
     # spawn the in game UI
     UI_objects = []
-    UI_objects.append(TextObject(window=window, size=28, colour=g_COLOURS['RED'], text='Player 1', position_by='center', position=(60, 20)))
-    UI_objects.append(TextObject(window=window, size=28, colour=g_COLOURS['RED'], text='0000', position_by='center',
-                                 position=(60, 55), game_stat_keys=['player1', 'score']))
-    UI_objects.append(TextObject(window=window, size=28, colour=g_COLOURS['RED'], text='3', position_by='center',
-                                 position=(60, 90), game_stat_keys=['player1', 'lives']))
+    UI_objects.append(TextObject(window=window, size=28, colour=g_COLOURS['RED'], text='Player 1', position_by='midleft',
+                                 position=(20, 20)))
+    UI_objects.append(TextObject(window=window, size=28, colour=g_COLOURS['RED'], text='0000', position_by='midleft',
+                                 position=(20, 55), game_stat_keys=['player1', 'score']))
+    UI_objects.append(TextObject(window=window, size=28, colour=g_COLOURS['RED'], text='3', position_by='midleft',
+                                 position=(20, 90), game_stat_keys=['player1', 'lives']))
     for UI_object in UI_objects:
         UI_draw_sprites.add(UI_object)
         UI_update_sprites.add(UI_object)
@@ -593,7 +591,7 @@ def main(): # main game code
     asteroid_list = []
     for i in range(num_initial_asteroids):
         ast = Asteroid(window)
-        asteroid_sprites.add(ast)
+        asteroid_dict.add(ast)
     last_asteroid_spawntime = 0
     print('asteroid spawned, next one in {0} milliseconds'.format(asteroid_spawn_interval))
 
@@ -605,7 +603,7 @@ def main(): # main game code
         # asteroid spawn manager
         if timenow > last_asteroid_spawntime + asteroid_spawn_interval:
             # spawn another asteroid
-            asteroid_sprites.add(Asteroid(window))
+            asteroid_dict.add(Asteroid(window))
             if asteroid_spawn_interval > 4000:
                 asteroid_spawn_interval -= 100
             print('asteroid spawned, next one in {0} milliseconds'.format(asteroid_spawn_interval))
@@ -646,10 +644,10 @@ def main(): # main game code
         # Collision checks
         if timenow >= next_collision_update:
             for projectile in projectile_sprites:  #
-                projectile.collision_check(asteroid_sprites)
+                projectile.collision_check(asteroid_dict)
                 projectile.last_collision_check = timenow
             for player in player_draw_sprites:
-                player.collision_check(asteroid_sprites)
+                player.collision_check(asteroid_dict)
                 player.last_collision_check = timenow
             next_collision_update = timenow + COLLISION_TICK
 
@@ -696,7 +694,7 @@ def main(): # main game code
 
         # Update
         player_update_sprites.update()
-        asteroid_sprites.update()
+        asteroid_dict.update()
         projectile_sprites.update()
         explosion_sprites.update()
         if timenow >= next_UI_update:
@@ -706,7 +704,7 @@ def main(): # main game code
         # Draw
         window.DISPLAYSURF.fill((35, 35, 55))
         projectile_sprites.draw(window.DISPLAYSURF)
-        asteroid_sprites.draw(window.DISPLAYSURF)
+        asteroid_dict.draw(window.DISPLAYSURF)
         player_draw_sprites.draw(window.DISPLAYSURF)
         explosion_sprites.draw(window.DISPLAYSURF)
         UI_draw_sprites.draw(window.DISPLAYSURF)
@@ -729,7 +727,7 @@ if __name__ == '__main__':
 To Do:
 
 
-score, lives display
+
 fire rate decay
 teleporting
 add starting health to asteroid dict, plus hit but not die effect (flash)
