@@ -7,12 +7,12 @@ import random
 
 
 # global variables
-GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]      # base script path, for relative resource gathering
-SPRITEDIR = os.path.join(GAMEDIR, 'sprites')                                    # sprite directory, relative to base path
-game_state = 'menu screen'                                                      # the main game state
-game_stats = {'player1': {'score': 000, 'lives': 3, 'powerup': ''},
+g_GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]      # base script path, for relative resource gathering
+g_SPRITEDIR = os.path.join(g_GAMEDIR, 'sprites')                                    # sprite directory, relative to base path
+g_game_state = 'menu screen'                                                      # the main game state
+g_game_stats = {'player1': {'score': 000, 'lives': 3, 'powerup': ''},
               'player2': {'score': 000, 'lives': 3, 'powerup': ''}}                         # tracks game stats
-COLOURS = {'BLACK': (0, 0, 0), 'GREEN': (0, 255, 0), 'L_BLUE': (130, 220, 255), # some default colours
+g_COLOURS = {'BLACK': (0, 0, 0), 'GREEN': (0, 255, 0), 'L_BLUE': (130, 220, 255), # some default g_COLOURS
            'RED': (255, 0, 0)}
 
 
@@ -44,7 +44,7 @@ class Window(object):
 
 class SpaceObject(pygame.sprite.Sprite):
 
-    global game_state, game_stats, SPRITEDIR, COLOURS
+    global g_game_state, g_game_stats, g_SPRITEDIR, g_COLOURS
 
     def __init__(self, window, spritesize = (20, 20), position_by='center'):
         pygame.sprite.Sprite.__init__(self)         # init the parent class
@@ -68,7 +68,7 @@ class SpaceObject(pygame.sprite.Sprite):
         self.last_collision_owner = None            # stores the owner of the last colliding object
 
         self.image_original = pygame.Surface(spritesize)    # always clean version of the sprite image, updated from here on self.update
-        self.image_original.fill((COLOURS['L_BLUE']))       # default square fill in place of an image
+        self.image_original.fill((g_COLOURS['L_BLUE']))       # default square fill in place of an image
         self.image = self.image_original.copy()             # actual image drawn
 
         self.rebuild() # reset rect, radius and screen wrap padding values to new loaded image
@@ -156,7 +156,7 @@ class SpaceObject(pygame.sprite.Sprite):
             self.image = pygame.transform.rotate(self.image_original, self.orientation)  # recreate image from clean transform of original
             self.rect = self.image.get_rect()  # grab the rect of the new image
             self.rect.center = old_center  # ... and position it in the same center as the previous one
-            self.image.set_colorkey(COLOURS['BLACK'])  # new image, so need to colour key
+            self.image.set_colorkey(g_COLOURS['BLACK'])  # new image, so need to colour key
 
             # update sprite position
             self.wraparound = self.set_wraparound()  # check if conditions have been met to enable/disable wraparound
@@ -229,14 +229,14 @@ class Player(SpaceObject):
         self.do_collision_check = True              # whether to perform the collision check
         self.health = self.DEFAULT_HEALTH           # set heath to default value
 
-        game_stats[name]['score'] = 0
-        game_stats[name]['lives'] = self.lives
+        g_game_stats[name]['score'] = 0
+        g_game_stats[name]['lives'] = self.lives
 
         # load our sprites, keep an original as rotation is lossy!
-        self.player_sprites = {'default': pygame.image.load(os.path.join(SPRITEDIR, 'player.png')),
-                               'thrust': pygame.image.load(os.path.join(SPRITEDIR, 'player_thrust.png')),
-                               'shield': pygame.image.load(os.path.join(SPRITEDIR, 'player_shield.png')),
-                               'thrust_shield': pygame.image.load(os.path.join(SPRITEDIR, 'player_thrust_shield.png'))}
+        self.player_sprites = {'default': pygame.image.load(os.path.join(g_SPRITEDIR, 'player.png')),
+                               'thrust': pygame.image.load(os.path.join(g_SPRITEDIR, 'player_thrust.png')),
+                               'shield': pygame.image.load(os.path.join(g_SPRITEDIR, 'player_shield.png')),
+                               'thrust_shield': pygame.image.load(os.path.join(g_SPRITEDIR, 'player_thrust_shield.png'))}
         self.image = self.player_sprites['default'].copy()
         self.ship_original = self.image.copy()
 
@@ -251,6 +251,7 @@ class Player(SpaceObject):
         if self.lives > 0:
             print('Lost a life, you clumsy oaf')
             self.state = 'health zero'
+            g_game_stats[self.name]['lives'] = self.lives
         if self.lives == 0:
             print('He\'s dead, Jim')
             self.state = 'dead'
@@ -348,7 +349,7 @@ class Asteroid(SpaceObject):
         self.asteroid_sprites = np.random.choice([self.asteroid_sprites_a, self.asteroid_sprites_b,
                                                   self.asteroid_sprites_c, self.asteroid_sprites_d], 1)[0]
 
-        self.image_original = pygame.image.load(os.path.join(SPRITEDIR, self.asteroid_sprites['images'][self.stage]))
+        self.image_original = pygame.image.load(os.path.join(g_SPRITEDIR, self.asteroid_sprites['images'][self.stage]))
 
         # this is temporary, need some art at this resolution
         if stage == 1:
@@ -367,7 +368,7 @@ class Asteroid(SpaceObject):
             self.max_rotation_speed *= 4
 
         self.image = self.image_original.copy()
-        self.image.set_colorkey((COLOURS['BLACK']))
+        self.image.set_colorkey((g_COLOURS['BLACK']))
 
         self.rebuild()  # reset rect, radius and screen wrap padding values to new loaded image
 
@@ -413,10 +414,10 @@ class Asteroid(SpaceObject):
         return self.wraparound
     
     def on_health_zero(self):
-        print('{0} on heath zero with last collision owner: {1}'.format(self, self.last_collision_owner))
+        #print('{0} on heath zero with last collision owner: {1}'.format(self, self.last_collision_owner))
         if self.last_collision_owner:  # if the last collision has an owner, e.g asteroid hit by projectile, increment scores
-            game_stats[self.last_collision_owner]['score'] = game_stats[self.last_collision_owner]['score'] + 1
-            print(game_stats)
+            g_game_stats[self.last_collision_owner]['score'] = g_game_stats[self.last_collision_owner]['score'] + 1
+            #print(g_game_stats)
             #  tidy up the above, maybe have a game stat manager class with a simpler interface
         if not self.stage == 3:
             for i in range(self.number_fragments):
@@ -461,7 +462,7 @@ class AnimatingObject(SpaceObject):
 
         self.position.xy = position[0], position[1]
         # construct the sprite path - should be subfolder which contains only anim frames for this sprite
-        sprite_dir = os.path.realpath(os.path.join(SPRITEDIR, subfolder))
+        sprite_dir = os.path.realpath(os.path.join(g_SPRITEDIR, subfolder))
         # return all images in this dir (sequence)
         image_sequence = [f for f in os.listdir(sprite_dir) if os.path.isfile(os.path.join(sprite_dir, f))]
         self.images = []                    # list of pygame image objects
@@ -496,17 +497,52 @@ class AnimatingObject(SpaceObject):
 
 class TextObject(SpaceObject):
 
-    def __init__(self, window, font='freesansbold.ttf', size=32, colour=COLOURS['GREEN'], text='Hello World!',
-                 position_by='center', position=(0, 0), game_stat_keys=[None,None]):
+    def __init__(self, window, font='freesansbold.ttf', size=32, colour=g_COLOURS['GREEN'], text='Hello World!',
+                 position_by='center', position=(0, 0), game_stat_keys=['', '']):
         SpaceObject.__init__(self, window, position_by=position_by)
         self.position.xy = position[0], position[1]
-        fontObj = pygame.font.Font(font, size)  # create a font object
-        self.image_original = fontObj.render(text, True, colour, COLOURS['BLACK']) # create surface obj with text drawn on it
-        self.image.set_colorkey((COLOURS['BLACK']))
+        self.fontObj = pygame.font.Font(font, size)  # create a font object
+        self.colour = colour
+        self.image_original = self.fontObj.render(text, True, self.colour, g_COLOURS['BLACK']) # create surface obj with text drawn on it
+        self.image = self.image_original.copy()
+        self.image.set_colorkey((g_COLOURS['BLACK']))
         self.rebuild()
 
-    def before_update(self):
-        pass
+        if self.position_by == 'center':
+            self.rect.center = self.position
+        if self.position_by == 'midleft':
+            self.rect.midleft = self.position
+        if self.position_by == 'midright':
+            self.rect.midright = self.position
+        if self.position_by == 'midtop':
+            self.rect.midtop = self.position
+        if self.position_by == 'midbottom':
+            self.rect.midbottom = self.position
+        if self.position_by == 'topleft':
+            self.rect.topleft = self.position
+        if self.position_by == 'topright':
+            self.rect.topright = self.position
+        if self.position_by == 'bottomleft':
+            self.rect.bottomleft = self.position
+        if self.position_by == 'bottomright':
+            self.rect.bottomright = self.position
+
+        self.player_key = None
+        self.stat_key = None
+        if game_stat_keys[0] in g_game_stats:
+            if game_stat_keys[1] in g_game_stats[game_stat_keys[0]]:
+                self.player_key = game_stat_keys[0]
+                self.stat_key = game_stat_keys[1]
+        #print(self.player_key, self.stat_key)
+
+
+    def update(self):
+        if not self.player_key == None and not self.stat_key == None:
+            text = g_game_stats[self.player_key][self.stat_key]
+            self.image = self.fontObj.render(str(text), True, self.colour, g_COLOURS['BLACK'])
+            self.image.set_colorkey((g_COLOURS['BLACK']))
+
+
 
 
 
@@ -516,6 +552,9 @@ def main(): # main game code
     # some constants...
     FPS = 120                   # set frames per second
     COLLISION_TICK = 16         # tick interval in milliseconds for collision detection
+    next_collision_update = 0   # time for next collision update
+    UI_TICK = 250               # tick interval in milliseconds for UI update
+    next_UI_update = 0          # time for next UI update
     RESPAWN_DELAY = 3000        # re-spawn delay time in milliseconds
     clock = pygame.time.Clock() # clock to allow millisecond-based (i.e frame-rate independent) timing
     multiplayer = False         # single or multi-layer
@@ -531,9 +570,11 @@ def main(): # main game code
 
     # spawn the in game UI
     UI_objects = []
-    UI_objects.append(TextObject(window=window, size=28, colour=COLOURS['RED'], text='Player 1', position_by='center', position=(60, 20)))
-    UI_objects.append(TextObject(window=window, size=28, colour=COLOURS['RED'], text='0000', position_by='center', position=(60, 55)))
-    UI_objects.append(TextObject(window=window, size=28, colour=COLOURS['RED'], text='3', position_by='center', position=(60, 90)))
+    UI_objects.append(TextObject(window=window, size=28, colour=g_COLOURS['RED'], text='Player 1', position_by='center', position=(60, 20)))
+    UI_objects.append(TextObject(window=window, size=28, colour=g_COLOURS['RED'], text='0000', position_by='center',
+                                 position=(60, 55), game_stat_keys=['player1', 'score']))
+    UI_objects.append(TextObject(window=window, size=28, colour=g_COLOURS['RED'], text='3', position_by='center',
+                                 position=(60, 90), game_stat_keys=['player1', 'lives']))
     for UI_object in UI_objects:
         UI_draw_sprites.add(UI_object)
         UI_update_sprites.add(UI_object)
@@ -603,14 +644,14 @@ def main(): # main game code
 
 
         # Collision checks
-        for projectile in projectile_sprites:#
-            if (timenow - projectile.last_collision_check) > COLLISION_TICK:
+        if timenow >= next_collision_update:
+            for projectile in projectile_sprites:  #
                 projectile.collision_check(asteroid_sprites)
                 projectile.last_collision_check = timenow
-        for player in player_draw_sprites:
-            if (timenow - player.last_collision_check) > COLLISION_TICK:
+            for player in player_draw_sprites:
                 player.collision_check(asteroid_sprites)
                 player.last_collision_check = timenow
+            next_collision_update = timenow + COLLISION_TICK
 
 
         # Check player states and manage group membership # dead, playing, health zero, awaiting re-spawn, teleporting
@@ -658,7 +699,9 @@ def main(): # main game code
         asteroid_sprites.update()
         projectile_sprites.update()
         explosion_sprites.update()
-        UI_update_sprites.update()
+        if timenow >= next_UI_update:
+            UI_update_sprites.update()
+            next_UI_update = timenow + UI_TICK
 
         # Draw
         window.DISPLAYSURF.fill((35, 35, 55))
