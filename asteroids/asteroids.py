@@ -44,18 +44,20 @@ class Window(object):
 
 class SpaceObject(pygame.sprite.Sprite):
 
-    global game_state, SPRITEDIR, COLOURS
+    global game_state, game_stats, SPRITEDIR, COLOURS
 
     def __init__(self, window, spritesize = (20, 20), position_by='center'):
         pygame.sprite.Sprite.__init__(self)         # init the parent class
         #print('SpaceObject init')
 
         self.window = window                        # main window for querying stuff like screen size
+        self.owner = None                           # who owns this object, e.g. player1 owns a projectile
         self.position_by = position_by              # set position by what part of the bbox, default is center
         self.position = pygame.Vector2(0, 0)        # screen space position of the sprite
         self.orientation = 0                        # orientation of the sprite in degrees
         self.motion_vector = pygame.Vector2(0, 0)   # the motion vector of the sprite
         self.wraparound = False                     # enable/disable screen wraparound
+        self.scoring_value = 0                      # scoring value of object when destroyed
         self.damage = 100                           # damage this object does to another on collision
         self.health = 100                           # this object health
         self.lives = 1                              # this object number of lives
@@ -63,6 +65,7 @@ class SpaceObject(pygame.sprite.Sprite):
         self._invulnerability_end = 0               # time when invulnerability ends
         self.do_collision_check = False             # enable/disable collision checks for this sprite
         self.last_collision_check = 0               # time in milliseconds of last collision check
+        self.last_collision_owner = None            # stores the owner of the last colliding object
 
         self.image_original = pygame.Surface(spritesize)    # always clean version of the sprite image, updated from here on self.update
         self.image_original.fill((COLOURS['L_BLUE']))       # default square fill in place of an image
@@ -102,6 +105,8 @@ class SpaceObject(pygame.sprite.Sprite):
         else:
             # get damage value of colliding object & subtract from self health
             self.health -= colliding_object.damage
+            # get the owner of the colliding object, e.g projectile, use this for assigning scores
+            self.last_collision_owner = colliding_object.owner
         # call on_collide function of the other object, passing this one. Callback flag is to prevent recursion
         if callback:
             colliding_object.on_collide(self, callback=False)
@@ -110,8 +115,7 @@ class SpaceObject(pygame.sprite.Sprite):
         if self.do_collision_check:
             for object in objects:
                 if pygame.sprite.collide_circle(self, object):
-                    #print('collision event: {0} {1}'.format(self, object))
-                    self.on_collide(colliding_object=object)
+                    self.on_collide(colliding_object=object)  # call the on_collide method, passing the colliding object
                     break  # run no further collision checks if collide detected
 
     def set_wraparound(self):
@@ -208,8 +212,11 @@ class Player(SpaceObject):
     def __init__(self, window, name='player1'):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
         self.name = name        # default name, used to access game stat dict
+        self.owner = name       # who owns this sprite, used in collision to track scoring
         self.state = 'playing'  # dead, playing, awaiting respawn, teleporting
         self.sprite_state = 'default'
+
+        self.window = window  # store a link to the window obj so we can query info about it
 
         # class properties
         self.thrust_vector = pygame.Vector2(0,0)    # thrust vector, added to the motion vector
@@ -222,7 +229,8 @@ class Player(SpaceObject):
         self.do_collision_check = True              # whether to perform the collision check
         self.health = self.DEFAULT_HEALTH           # set heath to default value
 
-        self.window = window  # store a link to the window obj so we can query info about it
+        game_stats[name]['score'] = 0
+        game_stats[name]['lives'] = self.lives
 
         # load our sprites, keep an original as rotation is lossy!
         self.player_sprites = {'default': pygame.image.load(os.path.join(SPRITEDIR, 'player.png')),
@@ -334,7 +342,7 @@ class Asteroid(SpaceObject):
         self.min_rotation_speed = 0.1       # default values for 120 x 120 sprite
         self.max_rotation_speed = 0.3       # default values for 120 x 120 sprite
         self.number_fragments = 3           # number of fragments to split into
-
+        self.scoring_value = 1              # scoring value on destroyed
         # pick random sprite set
         self.asteroid_sprites = {}
         self.asteroid_sprites = np.random.choice([self.asteroid_sprites_a, self.asteroid_sprites_b,
@@ -405,6 +413,11 @@ class Asteroid(SpaceObject):
         return self.wraparound
     
     def on_health_zero(self):
+        print('{0} on heath zero with last collision owner: {1}'.format(self, self.last_collision_owner))
+        if self.last_collision_owner:  # if the last collision has an owner, e.g asteroid hit by projectile, increment scores
+            game_stats[self.last_collision_owner]['score'] = game_stats[self.last_collision_owner]['score'] + 1
+            print(game_stats)
+            #  tidy up the above, maybe have a game stat manager class with a simpler interface
         if not self.stage == 3:
             for i in range(self.number_fragments):
                 ast = Asteroid(self.window, stage=self.stage+1, spawn_position=self.rect.center)
@@ -417,7 +430,7 @@ class Projectile(SpaceObject):
     # static properties
     TYPE = 'Projectile'
 
-    def __init__(self, window, position, ship_vector, ship_orientation, speed, spawntime):  # class constructor
+    def __init__(self, window, position, ship_vector, ship_orientation, speed, spawntime, owner):  # class constructor
         SpaceObject.__init__(self, window, spritesize=(2, 2))  # init the parent class
 
         self.position += position
@@ -426,6 +439,7 @@ class Projectile(SpaceObject):
         self.motion_vector.xy = 0, self.speed * -1
         self.motion_vector = self.motion_vector.rotate(self.orientation * -1)
         self.motion_vector += ship_vector
+        self.owner = owner
 
         self.do_collision_check = True
         self.spawntime = spawntime
@@ -482,13 +496,17 @@ class AnimatingObject(SpaceObject):
 
 class TextObject(SpaceObject):
 
-    def __init__(self, window, font='freesansbold.ttf', size=32, colour=COLOURS['GREEN'], text='Hello World!', position_by='center', position=(0, 0)):
+    def __init__(self, window, font='freesansbold.ttf', size=32, colour=COLOURS['GREEN'], text='Hello World!',
+                 position_by='center', position=(0, 0), game_stat_keys=[None,None]):
         SpaceObject.__init__(self, window, position_by=position_by)
         self.position.xy = position[0], position[1]
         fontObj = pygame.font.Font(font, size)  # create a font object
         self.image_original = fontObj.render(text, True, colour, COLOURS['BLACK']) # create surface obj with text drawn on it
         self.image.set_colorkey((COLOURS['BLACK']))
         self.rebuild()
+
+    def before_update(self):
+        pass
 
 
 
@@ -573,7 +591,8 @@ def main(): # main game code
                 if (timenow - player1.last_fire) > player1.firing_interval:
                     # instance the projectile class here
                     projectile = Projectile(window=window, position=player1.position, ship_vector=player1.motion_vector,
-                                            ship_orientation=player1.orientation, speed=player1.projectile_speed, spawntime=timenow)
+                                            ship_orientation=player1.orientation, speed=player1.projectile_speed,
+                                            spawntime=timenow, owner=player1.name)
                     projectile_sprites.add(projectile)
                     player1.last_fire = timenow
 
