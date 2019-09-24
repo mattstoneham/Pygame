@@ -9,9 +9,12 @@ import random
 # global variables
 GAMEDIR = os.path.split(os.path.abspath(os.path.realpath(sys.argv[0])))[0]      # base script path, for relative resource gathering
 SPRITEDIR = os.path.join(GAMEDIR, 'sprites')                                    # sprite directory, relative to base path
-GameState = 'menu screen'                                                       # the main game state
+game_state = 'menu screen'                                                      # the main game state
+game_stats = {'player1': {'score': 000, 'lives': 3, 'powerup': ''},
+              'player2': {'score': 000, 'lives': 3, 'powerup': ''}}                         # tracks game stats
 COLOURS = {'BLACK': (0, 0, 0), 'GREEN': (0, 255, 0), 'L_BLUE': (130, 220, 255), # some default colours
            'RED': (255, 0, 0)}
+
 
 player_sprites = pygame.sprite.Group()          # All player sprites
 player_draw_sprites = pygame.sprite.Group()     # Player sprites to draw
@@ -41,7 +44,7 @@ class Window(object):
 
 class SpaceObject(pygame.sprite.Sprite):
 
-    global GameState, SPRITEDIR, COLOURS
+    global game_state, SPRITEDIR, COLOURS
 
     def __init__(self, window, spritesize = (20, 20), position_by='center'):
         pygame.sprite.Sprite.__init__(self)         # init the parent class
@@ -202,9 +205,9 @@ class Player(SpaceObject):
     ROTATION_DECAY = 97                 # the rotation step decay rate
     DEFAULT_HEALTH = 100
 
-    def __init__(self, window):  # class constructor
+    def __init__(self, window, name='player1'):  # class constructor
         SpaceObject.__init__(self, window)  # init the parent class
-
+        self.name = name        # default name, used to access game stat dict
         self.state = 'playing'  # dead, playing, awaiting respawn, teleporting
         self.sprite_state = 'default'
 
@@ -510,15 +513,15 @@ def main(): # main game code
 
     # spawn the in game UI
     UI_objects = []
-    UI_objects.append(TextObject(window=window, colour=COLOURS['RED'], text='Player 1', position_by='topleft', position=(20, 20)))
-    UI_objects.append(TextObject(window=window, colour=COLOURS['RED'], text='Lives:', position_by='topleft', position=(20, 55)))
-    UI_objects.append(TextObject(window=window, colour=COLOURS['RED'], text='Score:', position_by='topleft', position=(20, 90)))
+    UI_objects.append(TextObject(window=window, size=28, colour=COLOURS['RED'], text='Player 1', position_by='center', position=(60, 20)))
+    UI_objects.append(TextObject(window=window, size=28, colour=COLOURS['RED'], text='0000', position_by='center', position=(60, 55)))
+    UI_objects.append(TextObject(window=window, size=28, colour=COLOURS['RED'], text='3', position_by='center', position=(60, 90)))
     for UI_object in UI_objects:
         UI_draw_sprites.add(UI_object)
         UI_update_sprites.add(UI_object)
 
     # spawn the player
-    player1 = Player(window)
+    player1 = Player(window=window, name='player1')
     player_sprites.add(player1)
     player_update_sprites.add(player1)
     player_draw_sprites.add(player1)
